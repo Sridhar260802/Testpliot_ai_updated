@@ -324,6 +324,174 @@ def functional_summary_bar(executed, total, passed, failed, partial, skipped):
     return t
 
 
+def param_value_table(rows, header=("Parameter", "Result"), header_bg=None, label_width_mm=55):
+    """
+    Renders one continuous two-column table - label on the left, value on
+    the right - with a bold colored header row and zebra-striped body,
+    matching the exact visual style already used for the SSL/TLS
+    Certificate Audit and DNS/DNSSEC/WHOIS tables elsewhere in the
+    Premium report.
+
+    Using this (instead of stat_grid_table's shorter multi-pair rows)
+    for the Security/Content/UX/CRO/Technical audit summaries keeps every
+    section built from the same single-table structure - one header row,
+    one row per item, one consistent pair of column widths - so the
+    report reads as one coherent, professional document rather than a
+    mix of different table shapes.
+
+    rows: list of (label, value) pairs, e.g.
+        [("Word Count", 2860), ("Headings", 41)]
+    header: the two header-cell labels, e.g. ("Parameter", "Result") or
+        ("Metric", "Value").
+    header_bg: hex color string for the header row background; defaults
+        to the report's standard olive accent (OLIVE_ACCENT) so every
+        section header row matches unless a section deliberately wants
+        a different accent (as SSL/TLS and DNS tables already do).
+    """
+    header_style = ParagraphStyle(
+        "PVHeader", fontName="Helvetica-Bold", fontSize=9.5, textColor=colors.white,
+    )
+    label_style = ParagraphStyle(
+        "PVLabel", fontName="Helvetica-Bold", fontSize=9,
+        textColor=colors.HexColor("#333333"),
+    )
+    value_style = ParagraphStyle(
+        "PVValue", fontName="Helvetica", fontSize=9,
+        textColor=colors.HexColor("#333333"),
+    )
+
+    data = [[Paragraph(str(header[0]), header_style), Paragraph(str(header[1]), header_style)]]
+    for label, value in rows:
+        data.append([Paragraph(str(label), label_style), Paragraph(str(value), value_style)])
+
+    label_w = label_width_mm * mm
+    value_w = CONTENT_WIDTH - label_w
+
+    bg_color = colors.HexColor(header_bg) if header_bg else OLIVE_ACCENT
+
+    t = Table(data, colWidths=[label_w, value_w], repeatRows=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), bg_color),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CFD8DC")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F7FA")]),
+    ]))
+    return t
+
+
+def stat_grid_table(rows, label_ratio=None):
+    """
+    Renders label/value stat rows (e.g. "Word Count : 2860", "Passed : 14")
+    as a grid of bordered, grey-labelled cells - the same visual language
+    already used by build_report_header's info table and
+    functional_summary_bar - instead of packing "<b>Label :</b> value
+    &nbsp;&nbsp;" into one Paragraph with manual <br/> line breaks.
+
+    That manual-spacing approach is what caused the misalignment in the
+    Security / Content / UX / Technical sections of the Premium report:
+    &nbsp; padding doesn't produce fixed-width columns, so rows drift out
+    of line as soon as label or value text length varies. A real Table
+    with explicit column widths keeps every row's labels and values
+    lined up regardless of content length.
+
+    rows: list of rows; each row is a list of (label, value) pairs, e.g.
+        [
+            [("Word Count", 2860), ("Headings", 41)],
+            [("Readability", "0 (Difficult to read)"),
+             ("Duplicate Paragraphs", 0)],
+        ]
+    A row may have 1, 2, 3 or 4 pairs.
+
+    Each label column is sized to its OWN text width (not a width shared
+    across every pair in the row) - a row mixing a long label with short
+    ones (e.g. "Internal Links Checked" / "Broken Links" / "Redirected
+    Links") previously forced the long label into a column sized off the
+    row average, wrapping it mid-word ("Internal Links" / "Checked" on
+    two lines). If the labels in a row are collectively too wide to leave
+    every value column at least MIN_VALUE_W, label widths are scaled down
+    proportionally rather than let one label starve the row.
+
+    Returns a list of Table flowables ready to extend() onto the story.
+    """
+
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    label_style = ParagraphStyle(
+        "StatGridLabel", fontName="Helvetica-Bold", fontSize=9.5,
+        textColor=colors.HexColor("#333333"),
+    )
+    value_style = ParagraphStyle(
+        "StatGridValue", fontName="Helvetica", fontSize=9.5,
+        textColor=colors.HexColor("#333333"),
+    )
+
+    LABEL_PADDING = 20  # left+right cell padding plus a little breathing room
+    MIN_LABEL_W = 46
+    MIN_VALUE_W = 40
+
+    flowables = []
+
+    for row in rows:
+        n = len(row)
+        if n == 0:
+            continue
+
+        if label_ratio is not None:
+            chunk_w = CONTENT_WIDTH / n
+            label_widths = [chunk_w * label_ratio for _ in row]
+        else:
+            # Size each label to its own text, not the row's widest label.
+            label_widths = [
+                max(stringWidth(str(label), "Helvetica-Bold", 9.5) + LABEL_PADDING, MIN_LABEL_W)
+                for label, _ in row
+            ]
+
+        total_label_w = sum(label_widths)
+        remaining_for_values = CONTENT_WIDTH - total_label_w
+
+        if remaining_for_values < n * MIN_VALUE_W:
+            # Labels collectively too wide for this row - scale them all
+            # down proportionally so every value still gets MIN_VALUE_W,
+            # instead of one long label pushing the row over budget.
+            available_for_labels = CONTENT_WIDTH - n * MIN_VALUE_W
+            if available_for_labels > 0 and total_label_w > 0:
+                scale = available_for_labels / total_label_w
+                label_widths = [w * scale for w in label_widths]
+            else:
+                label_widths = [CONTENT_WIDTH / (2 * n)] * n
+            value_w_each = MIN_VALUE_W
+        else:
+            value_w_each = remaining_for_values / n
+
+        cells = []
+        col_widths = []
+        for (label, value), label_w in zip(row, label_widths):
+            cells.append(Paragraph(str(label), label_style))
+            cells.append(Paragraph(str(value), value_style))
+            col_widths.extend([label_w, value_w_each])
+
+        t = Table([cells], colWidths=col_widths)
+        style_cmds = [
+            ("GRID", (0, 0), (-1, -1), 0.5, BORDER_GREY),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ]
+        for i in range(n):
+            style_cmds.append(("BACKGROUND", (2 * i, 0), (2 * i, 0), GREY_LABEL_BG))
+        t.setStyle(TableStyle(style_cmds))
+        flowables.append(t)
+
+    return flowables
+
+
 def module_status_table(module_rows):
     """
     module_rows: list of (module_name, status, note) - the compact
@@ -401,6 +569,14 @@ def format_ai_recommendations(text, normal_style):
     raw markdown blob."""
 
     if not text or not str(text).strip():
+        return [Paragraph("No AI suggestions generated.", normal_style)]
+
+    # Strip any <think>...</think> reasoning block a reasoning-capable LLM
+    # may have prepended - left in place this rendered verbatim as a wall
+    # of raw reasoning text ahead of the actual recommendations.
+    from app.services.website_ai_findings_service import strip_think_blocks
+    text = strip_think_blocks(text)
+    if not text.strip():
         return [Paragraph("No AI suggestions generated.", normal_style)]
 
     # Escape XML-special chars first - safe to do before the markdown scan

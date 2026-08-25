@@ -8,6 +8,7 @@ ever show the checks that actually ran for that tier - no "0 broken links /
 """
 
 from datetime import datetime
+from xml.sax.saxutils import escape as _xml_escape
 
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib import colors
@@ -22,13 +23,41 @@ from app.services.report_template import (
     summary_scores_table,
     functional_summary_bar,
     module_status_table,
-    format_ai_recommendations,
+    stat_grid_table,
+    param_value_table,
     footer_note,
     OLIVE_ACCENT,
     OLIVE_LIGHT_BG,
     ROW_ALT_BG,
     BORDER_GREY,
 )
+from app.services.website_ai_findings_service import (
+    collect_standard_issues,
+    collect_premium_issues,
+    ai_findings,
+    remediation_priority,
+)
+
+
+def _safe(value):
+    """
+    Escapes dynamic text before it goes inside a Paragraph().
+
+    ReportLab's Paragraph treats its string as a small XML dialect - any
+    stray '<', '>', or bare '&' in real-world data (a URL query string
+    like '...&w=135&output=webp', a finding title copied from a scan
+    result, an LLM-authored fix_recommendation, etc.) is parsed as a tag
+    or entity. An unmatched '<' is exactly what produced:
+
+        ValueError: paraparser: syntax error: parse ended with 1
+        unclosed tags
+
+    Every place in this module that interpolates scan/AI-generated text
+    into a Paragraph f-string needs to escape that text first - the
+    literal "<b>", "</b>", "&bull;", "&nbsp;" etc. we author ourselves
+    stay as-is since we still want those tags to render as tags.
+    """
+    return _xml_escape("" if value is None else str(value))
 
 
 def _status_line(label, score):
@@ -114,13 +143,13 @@ def _extract_failure_details(result, limit=10):
 
 
 def _issues_block(title, issues, normal_style):
-    story = [Paragraph(f"<b>{title}</b>", normal_style)]
+    story = [Paragraph(f"<b>{_safe(title)}</b>", normal_style)]
 
     if not issues:
         story.append(Paragraph("No issues detected.", normal_style))
     else:
         for issue in issues:
-            story.append(Paragraph(f"&bull; {issue}", normal_style))
+            story.append(Paragraph(f"&bull; {_safe(issue)}", normal_style))
 
     story.append(Spacer(1, 0.15 * inch))
     return story
@@ -137,6 +166,66 @@ def _p_cell(text, style):
 def _severity_badge_cell(severity, style):
     color = SEVERITY_COLORS.get(str(severity).upper(), "#546E7A")
     return Paragraph(f'<font color="{color}"><b>{severity}</b></font>', style)
+
+
+def _ai_root_cause_section(issues, depth, normal):
+    """Renders the deterministic 'AI Root Cause + Fix Recommendation'
+    section - same layout as the mobile app report's AI Root Cause
+    section - instead of dropping raw LLM text into the PDF."""
+    story = []
+    findings = ai_findings(issues, depth=depth)
+
+    if not findings:
+        story.append(Paragraph("No issues were found that require a fix recommendation.", normal))
+        return story
+
+    for finding in findings:
+        story.append(Paragraph(f"<b>[{_safe(finding['severity'])}] {_safe(finding['title'])}</b>", normal))
+        if "root_cause" in finding and "fix_recommendation" in finding:
+            story.append(Paragraph(f"<b>Root cause:</b> {_safe(finding['root_cause'])}", normal))
+            story.append(Paragraph(f"<b>Fix:</b> {_safe(finding['fix_recommendation'])}", normal))
+        else:
+            story.append(Paragraph(f"<b>Recommendation:</b> {_safe(finding.get('recommendation', ''))}", normal))
+        story.append(Spacer(1, 0.1 * inch))
+
+    return story
+
+
+def _remediation_priority_section(issues, normal):
+    """Renders the 'Remediation Priority' table - same layout/columns as
+    the mobile app report's Remediation Priority section."""
+    story = []
+    ranked = remediation_priority(issues)
+
+    if not ranked:
+        story.append(Paragraph("No outstanding items to prioritize.", normal))
+        return story
+
+    cell_style = ParagraphStyle("RemCell", parent=normal, fontSize=8.2, leading=10.2)
+    cell_bold = ParagraphStyle("RemCellBold", parent=cell_style, fontName="Helvetica-Bold")
+
+    table_data = [[
+        _p_cell("#", cell_bold), _p_cell("Severity", cell_bold),
+        _p_cell("Finding", cell_bold), _p_cell("Recommended Action", cell_bold),
+    ]]
+    for idx, r in enumerate(ranked, start=1):
+        table_data.append([
+            _p_cell(idx, cell_style),
+            _severity_badge_cell(r["severity"], cell_bold),
+            _p_cell(r["title"], cell_style),
+            _p_cell(r["recommended_action"], cell_style),
+        ])
+
+    t = Table(table_data, colWidths=[18 * mm, 26 * mm, 82 * mm, 44 * mm], repeatRows=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#495B16")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CFD8DC")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F7FA")]),
+    ]))
+    story.append(t)
+    return story
 
 
 def _full_security_section(security, heading, normal):
@@ -157,15 +246,23 @@ def _full_security_section(security, heading, normal):
 
     story.append(Paragraph("Security Audit", heading))
     story.append(
+        param_value_table(
+            [
+                ("Status", status),
+                ("Total Checks", summary.get("total_checks", 0)),
+                ("Passed", summary.get("passed_checks", 0)),
+                ("Failed", summary.get("failed_checks", 0)),
+                ("Critical", summary.get("critical", 0)),
+                ("High", summary.get("high", 0)),
+                ("Medium", summary.get("medium", 0)),
+                ("Low", summary.get("low", 0)),
+            ],
+            header=("Parameter", "Result"),
+        )
+    )
+    story.append(Spacer(1, 0.12 * inch))
+    story.append(
         Paragraph(
-            f"<b>Status :</b> {status}<br/>"
-            f"<b>Total Checks :</b> {summary.get('total_checks', 0)} &nbsp;&nbsp;"
-            f"<b>Passed :</b> {summary.get('passed_checks', 0)} &nbsp;&nbsp;"
-            f"<b>Failed :</b> {summary.get('failed_checks', 0)}<br/>"
-            f"<b>Critical :</b> {summary.get('critical', 0)} &nbsp;&nbsp;"
-            f"<b>High :</b> {summary.get('high', 0)} &nbsp;&nbsp;"
-            f"<b>Medium :</b> {summary.get('medium', 0)} &nbsp;&nbsp;"
-            f"<b>Low :</b> {summary.get('low', 0)}<br/><br/>"
             "Covers: SSL/TLS audit, SSL certificate validation, TLS cipher "
             "analysis, security headers, cookie security, CORS, HTTP/HTTPS "
             "audit, HTTP methods, sensitive paths, mixed content, "
@@ -543,12 +640,12 @@ def generate_premium_pdf_report(data, filename="Premium_Website_Report.pdf"):
 
             if detail_items:
                 story.append(
-                    Paragraph(f"<b>{module_name} - failing items</b>", normal)
+                    Paragraph(f"<b>{_safe(module_name)} - failing items</b>", normal)
                 )
 
             for item in detail_items:
                 story.append(
-                    Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;- {item}", normal)
+                    Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;- {_safe(item)}", normal)
                 )
 
             if total_found > len(detail_items):
@@ -572,57 +669,90 @@ def generate_premium_pdf_report(data, filename="Premium_Website_Report.pdf"):
     story.append(section_heading("4. Content Audit"))
     story.append(Spacer(1, 0.12 * inch))
     story.append(
+        param_value_table(
+            [
+                ("Word Count", content_audit_data.get("word_count", 0)),
+                ("Headings", content_audit_data.get("heading_count", 0)),
+                (
+                    "Readability",
+                    f"{content_audit_data.get('readability_score', 0)} "
+                    f"({content_audit_data.get('readability_label', 'N/A')})",
+                ),
+                ("Duplicate Paragraphs", content_audit_data.get("duplicate_paragraph_count", 0)),
+            ],
+            header=("Metric", "Value"),
+        )
+    )
+    story.append(Spacer(1, 0.12 * inch))
+    story.append(
         Paragraph(
-            f"<b>Word Count :</b> {content_audit_data.get('word_count', 0)} &nbsp;&nbsp;"
-            f"<b>Headings :</b> {content_audit_data.get('heading_count', 0)}<br/>"
-            f"<b>Readability :</b> {content_audit_data.get('readability_score', 0)} "
-            f"({content_audit_data.get('readability_label', 'N/A')})<br/>"
-            f"<b>Duplicate Paragraphs :</b> {content_audit_data.get('duplicate_paragraph_count', 0)}<br/><br/>"
             "Covers: thin/duplicate content, content quality &amp; relevance, "
             "grammar &amp; readability, and content opportunities.",
             normal,
         )
     )
     for issue in content_audit_data.get("issues", []):
-        story.append(Paragraph(f"&bull; {issue}", normal))
+        story.append(Paragraph(f"&bull; {_safe(issue)}", normal))
     story.append(Spacer(1, 0.25 * inch))
 
     # ---------------- PREMIUM SECTION: UX AUDIT ----------------
     story.append(section_heading("5. User Experience (UX) Audit"))
     story.append(Spacer(1, 0.12 * inch))
     story.append(
+        param_value_table(
+            [
+                ("Navigation Present", ux_audit_data.get("has_navigation", False)),
+                ("Footer Present", ux_audit_data.get("has_footer", False)),
+                ("Clear CTA Found", ux_audit_data.get("has_cta", False)),
+                ("Mobile Horizontal Overflow", ux_audit_data.get("mobile_horizontal_overflow", "N/A")),
+                ("Mobile Nav Visible", ux_audit_data.get("mobile_navigation_visible", "N/A")),
+            ],
+            header=("Metric", "Value"),
+        )
+    )
+    story.append(Spacer(1, 0.12 * inch))
+    story.append(
         Paragraph(
-            f"<b>Navigation Present :</b> {ux_audit_data.get('has_navigation', False)} &nbsp;&nbsp;"
-            f"<b>Footer Present :</b> {ux_audit_data.get('has_footer', False)}<br/>"
-            f"<b>Clear CTA Found :</b> {ux_audit_data.get('has_cta', False)}<br/>"
-            f"<b>Mobile Horizontal Overflow :</b> {ux_audit_data.get('mobile_horizontal_overflow', 'N/A')}<br/>"
-            f"<b>Mobile Nav Visible :</b> {ux_audit_data.get('mobile_navigation_visible', 'N/A')}<br/><br/>"
             "Covers: navigation &amp; menu structure, mobile responsiveness, "
             "readability, accessibility, CTAs and overall usability.",
             normal,
         )
     )
     for issue in ux_audit_data.get("issues", []):
-        story.append(Paragraph(f"&bull; {issue}", normal))
+        story.append(Paragraph(f"&bull; {_safe(issue)}", normal))
     story.append(Spacer(1, 0.25 * inch))
 
     # ---------------- PREMIUM SECTION: CRO AUDIT ----------------
     story.append(section_heading("6. Conversion Rate Optimization (CRO) Audit"))
     story.append(Spacer(1, 0.12 * inch))
     story.append(
+        param_value_table(
+            [
+                ("CTA Above the Fold", cro_audit_data.get("cta_above_fold", False)),
+                (
+                    "Forms Found",
+                    f"{cro_audit_data.get('form_count', 0)} "
+                    f"(Poorly Labeled: {cro_audit_data.get('poorly_labeled_form_count', 0)})",
+                ),
+                ("Looks Like E-commerce", cro_audit_data.get("looks_like_ecommerce", False)),
+                (
+                    "Analytics Detected",
+                    ", ".join(cro_audit_data.get("analytics_detected", [])) or "None",
+                ),
+            ],
+            header=("Metric", "Value"),
+        )
+    )
+    story.append(Spacer(1, 0.12 * inch))
+    story.append(
         Paragraph(
-            f"<b>CTA Above the Fold :</b> {cro_audit_data.get('cta_above_fold', False)}<br/>"
-            f"<b>Forms Found :</b> {cro_audit_data.get('form_count', 0)} "
-            f"(<b>Poorly Labeled :</b> {cro_audit_data.get('poorly_labeled_form_count', 0)})<br/>"
-            f"<b>Looks Like E-commerce :</b> {cro_audit_data.get('looks_like_ecommerce', False)}<br/>"
-            f"<b>Analytics Detected :</b> {', '.join(cro_audit_data.get('analytics_detected', [])) or 'None'}<br/><br/>"
             "Covers: landing page effectiveness, form usability, checkout "
             "process, CTA placement and analytics/conversion tracking.",
             normal,
         )
     )
     for issue in cro_audit_data.get("issues", []):
-        story.append(Paragraph(f"&bull; {issue}", normal))
+        story.append(Paragraph(f"&bull; {_safe(issue)}", normal))
     story.append(Spacer(1, 0.25 * inch))
 
     # ---------------- PREMIUM SECTION: TECHNICAL AUDIT ----------------
@@ -632,27 +762,43 @@ def generate_premium_pdf_report(data, filename="Premium_Website_Report.pdf"):
     caching = technical_audit_data.get("caching_and_compression", {})
     vitals = technical_audit_data.get("core_web_vitals", {})
     story.append(
+        param_value_table(
+            [
+                ("Internal Links Checked", crawl.get("links_checked", 0)),
+                ("Broken Links", len(crawl.get("broken_links", []))),
+                ("Redirected Links", len(crawl.get("redirect_links", []))),
+                ("Cache-Control Set", caching.get("has_cache_control", False)),
+                ("Compressed", caching.get("is_compressed", False)),
+                ("Largest Contentful Paint", f"{vitals.get('largest_contentful_paint_ms', 'N/A')} ms"),
+                ("Cumulative Layout Shift", vitals.get("cumulative_layout_shift", "N/A")),
+            ],
+            header=("Metric", "Value"),
+        )
+    )
+    story.append(Spacer(1, 0.12 * inch))
+    story.append(
         Paragraph(
-            f"<b>Internal Links Checked :</b> {crawl.get('links_checked', 0)} &nbsp;&nbsp;"
-            f"<b>Broken Links :</b> {len(crawl.get('broken_links', []))} &nbsp;&nbsp;"
-            f"<b>Redirected Links :</b> {len(crawl.get('redirect_links', []))}<br/>"
-            f"<b>Cache-Control Set :</b> {caching.get('has_cache_control', False)} &nbsp;&nbsp;"
-            f"<b>Compressed :</b> {caching.get('is_compressed', False)}<br/>"
-            f"<b>Largest Contentful Paint :</b> {vitals.get('largest_contentful_paint_ms', 'N/A')} ms &nbsp;&nbsp;"
-            f"<b>Cumulative Layout Shift :</b> {vitals.get('cumulative_layout_shift', 'N/A')}<br/><br/>"
             "Covers: HTTPS implementation, redirects, structured data, "
             "canonical tags, crawlability, caching/compression and Core Web Vitals.",
             normal,
         )
     )
     for issue in technical_audit_data.get("issues", []):
-        story.append(Paragraph(f"&bull; {issue}", normal))
+        story.append(Paragraph(f"&bull; {_safe(issue)}", normal))
     story.append(Spacer(1, 0.25 * inch))
 
-    # ---------------- AI RECOMMENDATIONS (moved to the end) ----------------
-    story.append(section_heading("8. AI Recommendations &amp; Developer Action Items"))
+    # ---------------- AI ROOT CAUSE + FIX RECOMMENDATION ----------------
+    premium_issues = collect_premium_issues(data)
+    story.append(section_heading("8. AI Root Cause + Fix Recommendation"))
     story.append(Spacer(1, 0.12 * inch))
-    story.extend(format_ai_recommendations(ai_suggestions, normal))
+    story.extend(_ai_root_cause_section(premium_issues, depth="premium", normal=normal))
+    story.append(Spacer(1, 0.12 * inch))
+
+    # ---------------- REMEDIATION PRIORITY ----------------
+    story.append(section_heading("9. Remediation Priority"))
+    story.append(Spacer(1, 0.12 * inch))
+    story.extend(_remediation_priority_section(premium_issues, normal))
+    story.append(Spacer(1, 0.22 * inch))
 
     doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
 
@@ -753,12 +899,12 @@ def generate_standard_pdf_report(data, filename="Standard_Website_Report.pdf"):
 
             if detail_items:
                 story.append(
-                    Paragraph(f"<b>{module_name} - failing items</b>", normal)
+                    Paragraph(f"<b>{_safe(module_name)} - failing items</b>", normal)
                 )
 
             for item in detail_items:
                 story.append(
-                    Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;- {item}", normal)
+                    Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;- {_safe(item)}", normal)
                 )
 
             if total_found > len(detail_items):
@@ -771,9 +917,15 @@ def generate_standard_pdf_report(data, filename="Standard_Website_Report.pdf"):
                 )
 
     story.append(Spacer(1, 0.25 * inch))
-    story.append(section_heading("3. AI Recommendations"))
+    standard_issues = collect_standard_issues(data)
+    story.append(section_heading("3. AI Root Cause + Fix Recommendation"))
     story.append(Spacer(1, 0.1 * inch))
-    story.extend(format_ai_recommendations(ai_suggestions, normal))
+    story.extend(_ai_root_cause_section(standard_issues, depth="standard", normal=normal))
+
+    story.append(Spacer(1, 0.15 * inch))
+    story.append(section_heading("4. Remediation Priority"))
+    story.append(Spacer(1, 0.1 * inch))
+    story.extend(_remediation_priority_section(standard_issues, normal))
 
     story.append(Spacer(1, 0.15 * inch))
     story.append(

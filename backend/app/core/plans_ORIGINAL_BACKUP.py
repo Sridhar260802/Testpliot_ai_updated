@@ -8,7 +8,7 @@ data in this file - no changes are needed in the routers that use `require_plan`
 
 from fastapi import Depends, HTTPException, status
 
-from app.core.auth import get_current_user
+from backend.app.database.core.auth import get_current_user
 from app.models.user import User
 # Higher number = more access. Every tier includes everything below it.
 PLAN_RANK = {
