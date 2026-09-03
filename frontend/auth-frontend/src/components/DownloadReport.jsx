@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || "http://localhost:8000";
+
 export default function DownloadReport() {
   const [isLoading, setIsLoading] = useState(false);
 
   const downloadReportFromBackend = async () => {
     setIsLoading(true);
     try {
-      // Inga unga backend API URL-a unga thevaikku yetpa mathikkonga
-      const response = await axios.get('http://localhost:5000/api/report/download', {
+      const response = await axios.get(`${API_BASE_URL}/api/report/download`, {
         responseType: 'blob', // PDF file receive panna idhu romba mukkiyam
       });
 
