@@ -74,6 +74,36 @@ SENSITIVE_PATHS = [
     ".well-known/openid-configuration", "server.key", "server.pem",
 ]
 
+# ============================================================
+# [ADVANCED] SENSITIVE / INTERNAL LINK EXPOSURE
+# ------------------------------------------------------------
+# Outbound <a href> links on the public page that point at
+# internal infrastructure (localhost, private IPs, staging/dev
+# subdomains) or at sensitive admin/config endpoints. These
+# should never be reachable from a page the public can view.
+# ============================================================
+
+INTERNAL_HOST_PATTERNS = [
+    "localhost", "127.0.0.1", "0.0.0.0", "::1",
+]
+
+PRIVATE_IP_REGEX = re.compile(
+    r"^(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+    r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|"
+    r"192\.168\.\d{1,3}\.\d{1,3})$"
+)
+
+INTERNAL_SUBDOMAIN_KEYWORDS = [
+    "staging.", "stage.", "dev.", "test.", "uat.", "qa.",
+    "internal.", "preprod.", "sandbox.", "beta-internal.",
+]
+
+SENSITIVE_LINK_PATH_KEYWORDS = [
+    "/wp-admin", "/phpmyadmin", "/adminer", "/cpanel",
+    "/.git", "/.env", "/.svn", "/manager/html",
+    "/server-status", "/actuator", "/.aws/credentials",
+]
+
 SECURITY_HEADERS = {
     "Strict-Transport-Security": "HSTS",
     "Content-Security-Policy": "Content Security Policy",
@@ -870,6 +900,78 @@ def sensitive_paths_audit(base_url):
 
 
 # ============================================================
+# [ADVANCED] SENSITIVE / INTERNAL LINK EXPOSURE
+# ============================================================
+
+def internal_link_exposure_audit(response):
+    """
+    Scans the page's own outbound <a href> links for anything that
+    points at internal infrastructure or a sensitive admin/config
+    endpoint - things a public-facing page should never link to.
+    Returns a list of make_check() results (one per distinct finding).
+    """
+    checks = []
+    findings = []
+
+    try:
+        soup = BeautifulSoup(response.text, "html.parser")
+        seen = set()
+
+        for tag in soup.find_all("a", href=True):
+            href = tag["href"].strip()
+
+            if not href or href.startswith("#") or href.startswith("mailto:") or href.startswith("tel:"):
+                continue
+
+            if href in seen:
+                continue
+            seen.add(href)
+
+            parsed = urlparse(href)
+            hostname = (parsed.hostname or "").lower()
+            lowered = href.lower()
+
+            reason = None
+
+            if hostname in INTERNAL_HOST_PATTERNS or PRIVATE_IP_REGEX.match(hostname or ""):
+                reason = ("HIGH", f"Links to an internal/loopback host ({hostname}).")
+
+            elif any(keyword in hostname for keyword in INTERNAL_SUBDOMAIN_KEYWORDS):
+                reason = ("MEDIUM", f"Links to what looks like a staging/dev environment ({hostname}).")
+
+            elif any(keyword in lowered for keyword in SENSITIVE_LINK_PATH_KEYWORDS):
+                reason = ("HIGH", "Links directly to a sensitive admin/config endpoint.")
+
+            if reason:
+                findings.append({"href": href, "severity": reason[0], "reason": reason[1]})
+
+    except Exception as e:
+        return [make_check(
+            "Sensitive / Internal Link Exposure", "FAIL", "LOW",
+            f"Could not scan page links ({e}).",
+            "Retry the scan once the page has finished loading."
+        )]
+
+    if not findings:
+        return [make_check(
+            "Sensitive / Internal Link Exposure", "PASS", "INFO",
+            "No internal, staging or admin/config links were found in the page's outbound links.",
+            ""
+        )]
+
+    for item in findings[:20]:
+        checks.append(make_check(
+            f"Sensitive / Internal Link Exposure - {item['href']}",
+            "FAIL", item["severity"],
+            item["reason"],
+            "Remove this link from public-facing pages, or move the target behind authentication "
+            "so it isn't publicly reachable/discoverable."
+        ))
+
+    return checks
+
+
+# ============================================================
 # MIXED CONTENT AUDIT
 # ============================================================
 
@@ -1408,6 +1510,11 @@ def security_audit(url,db,user_id):
     else:
         passed_checks.append(make_check("Sensitive Path Exposure", "PASS", "INFO",
                                          "No tested sensitive paths returned HTTP 200.", ""))
+
+    # ---------------- [ADVANCED] SENSITIVE / INTERNAL LINK EXPOSURE ----------------
+    print("[8b] SENSITIVE / INTERNAL LINK EXPOSURE AUDIT")
+    for check in internal_link_exposure_audit(response):
+        bucket_check(check, passed_checks, failed_checks)
 
     # ---------------- MIXED CONTENT ----------------
     print("[9] MIXED CONTENT AUDIT")

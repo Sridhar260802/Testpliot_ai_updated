@@ -111,7 +111,7 @@ def basic_plan_report(
     return FileResponse(
         pdf_path,
         media_type="application/pdf",
-        filename="CrosbyTech_Basic_Report.pdf"
+        filename="TestPilot_Basic_Report.pdf"
     )
 
 
@@ -216,7 +216,7 @@ def standard_plan_report(
     return FileResponse(
         pdf_path,
         media_type="application/pdf",
-        filename="CrosbyTech_Standard_Report.pdf"
+        filename="TestPilot_Standard_Report.pdf"
     )
 
 
@@ -450,7 +450,7 @@ def premium_plan_report(
     return FileResponse(
         pdf_path,
         media_type="application/pdf",
-        filename="CrosbyTech_Premium_Report.pdf"
+        filename="TestPilot_Premium_Report.pdf"
     )
 
 
@@ -479,5 +479,5 @@ def download_premium_security_pdf(
     return FileResponse(
         requested_path,
         media_type="application/pdf",
-        filename="Crosbytech_Security_Audit_Report.pdf"
+        filename="TestPilot_Security_Audit_Report.pdf"
     )

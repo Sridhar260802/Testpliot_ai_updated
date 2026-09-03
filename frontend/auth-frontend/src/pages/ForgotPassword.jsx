@@ -8,7 +8,7 @@ import { Link } from "react-router-dom";
 import { requestPasswordReset, AuthError } from "../services/authService";
 import { validateEmail } from "../utils/validation";
 
-const BRAND_NAME = "Crosbytech";
+const BRAND_NAME = "TestPilot";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");

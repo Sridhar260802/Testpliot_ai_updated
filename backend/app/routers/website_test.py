@@ -197,7 +197,7 @@ def download_history_report(
     return FileResponse(
         test.report_path,
         media_type="application/pdf",
-        filename=f"CrosbyTech_{(test.plan or 'website').capitalize()}_Report_{test.id}.pdf"
+        filename=f"TestPilot_{(test.plan or 'website').capitalize()}_Report_{test.id}.pdf"
     )
 
 
@@ -354,5 +354,5 @@ def security_audit_test(
     return FileResponse(
         pdf_path,
         media_type="application/pdf",
-        filename="CrosbyTech_Security_Audit_Report.pdf"
+        filename="TestPilot_Security_Audit_Report.pdf"
     )

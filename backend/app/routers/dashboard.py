@@ -64,7 +64,7 @@ def download_dashboard_history_report(
     return FileResponse(
         test.report_path,
         media_type="application/pdf",
-        filename=f"CrosbyTech_{(test.plan or 'website').capitalize()}_Report_{test.id}.pdf"
+        filename=f"TestPilot_{(test.plan or 'website').capitalize()}_Report_{test.id}.pdf"
     )
 
 

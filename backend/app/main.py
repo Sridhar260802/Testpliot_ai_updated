@@ -1,9 +1,11 @@
 from dotenv import load_dotenv
 
 load_dotenv()
+
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect, text
 
 from app.models.dashboard import DashboardStats
 from app.database.database import Base, engine
@@ -27,11 +29,11 @@ from app.routers.mobile_test import router as mobile_router
 
 
 # --------------------------------------------------
-# CREATE APP - ONLY ONCE
+# CREATE APP
 # --------------------------------------------------
 
 app = FastAPI(
-    title="Crosbytech",
+    title="TestPilot",
     version="1.0.0",
     description="AI Powered Software Testing Platform",
     swagger_ui_parameters={
@@ -64,35 +66,86 @@ app.add_middleware(
 Base.metadata.create_all(bind=engine)
 
 
+# --------------------------------------------------
+# WEBSITE TESTS HISTORY COLUMNS
+# --------------------------------------------------
+
 def _ensure_website_tests_history_columns():
     """
-    create_all() only creates tables that don't exist yet — it never alters
-    an existing one. On a DB created before user_id/plan/created_at were
-    added to WebsiteTest, add them here so per-user history keeps working
-    without needing to delete the old testpilot.db.
+    PostgreSQL-compatible migration for older databases.
+
+    create_all() creates missing tables, but it does not add
+    new columns to an existing table.
     """
-    with engine.connect() as conn:
-        existing = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(website_tests)")}
+
+    inspector = inspect(engine)
+
+    if "website_tests" not in inspector.get_table_names():
+        return
+
+    existing = {
+        column["name"]
+        for column in inspector.get_columns("website_tests")
+    }
+
+    with engine.begin() as conn:
+
         if "user_id" not in existing:
-            conn.exec_driver_sql("ALTER TABLE website_tests ADD COLUMN user_id INTEGER")
+            conn.execute(
+                text(
+                    "ALTER TABLE website_tests "
+                    "ADD COLUMN user_id INTEGER"
+                )
+            )
+
         if "plan" not in existing:
-            conn.exec_driver_sql("ALTER TABLE website_tests ADD COLUMN plan VARCHAR")
+            conn.execute(
+                text(
+                    "ALTER TABLE website_tests "
+                    "ADD COLUMN plan VARCHAR"
+                )
+            )
+
         if "created_at" not in existing:
-            conn.exec_driver_sql("ALTER TABLE website_tests ADD COLUMN created_at DATETIME")
-        conn.commit()
+            conn.execute(
+                text(
+                    "ALTER TABLE website_tests "
+                    "ADD COLUMN created_at TIMESTAMP"
+                )
+            )
 
 
 _ensure_website_tests_history_columns()
 
 
+# --------------------------------------------------
+# DASHBOARD STATS MOBILE COLUMN
+# --------------------------------------------------
+
 def _ensure_dashboard_stats_mobile_column():
-    """Same reasoning as above: create_all() won't add mobile_tests to an
-    already-existing dashboard_stats table."""
-    with engine.connect() as conn:
-        existing = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(dashboard_stats)")}
+    """
+    PostgreSQL-compatible migration for dashboard_stats.
+    """
+
+    inspector = inspect(engine)
+
+    if "dashboard_stats" not in inspector.get_table_names():
+        return
+
+    existing = {
+        column["name"]
+        for column in inspector.get_columns("dashboard_stats")
+    }
+
+    with engine.begin() as conn:
+
         if "mobile_tests" not in existing:
-            conn.exec_driver_sql("ALTER TABLE dashboard_stats ADD COLUMN mobile_tests INTEGER DEFAULT 0")
-        conn.commit()
+            conn.execute(
+                text(
+                    "ALTER TABLE dashboard_stats "
+                    "ADD COLUMN mobile_tests INTEGER DEFAULT 0"
+                )
+            )
 
 
 _ensure_dashboard_stats_mobile_column()
@@ -120,7 +173,7 @@ app.include_router(mobile_router)
 @app.get("/")
 def root():
     return {
-        "message": "Crosbytech Backend Running Successfully"
+        "message": "TestPilot Backend Running Successfully"
     }
 
 

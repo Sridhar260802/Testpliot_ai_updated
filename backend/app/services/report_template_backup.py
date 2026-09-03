@@ -1,9 +1,9 @@
 """
-Shared Crosbytech report template.
+Shared TestPilot report template.
 
 Everything here exists so the Basic / Standard / Premium PDF reports
 (plan_pdf_service.py) all come out of the SAME visual template as
-Crosbytech_Report_Template_With_Logo.pdf - logo + olive brand colors,
+TestPilot_Report_Template_With_Logo.pdf - logo + olive brand colors,
 same header block, same "Summary Scores" and "Functional Testing
 Summary" table layouts - instead of each plan drawing its own
 one-off header.
@@ -21,7 +21,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_LEFT
 
 # ===============================
-# Brand palette (sampled from Crosbytech_Report_Template_With_Logo.pdf)
+# Brand palette (sampled from TestPilot_Report_Template_With_Logo.pdf)
 # ===============================
 
 OLIVE_DARK = colors.HexColor("#495B16")     # big title / heading text
@@ -33,11 +33,11 @@ BORDER_GREY = colors.HexColor("#D0D5C8")
 
 CONTENT_WIDTH = 450  # points - matches the width already used across plan_pdf_service tables
 
-# Logo lives at app/assets/crosbytech_logo.png
+# Logo lives at app/assets/TestPilot_logo.png
 LOGO_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "assets",
-    "crosbytech_logo.png",
+    "TestPilot_logo.png",
 )
 
 
@@ -61,7 +61,7 @@ def get_logo_flowable(max_width=1.7 * inch):
 
 def report_title_style():
     return ParagraphStyle(
-        "CrosbytechReportTitle",
+        "TestPilotReportTitle",
         fontName="Helvetica-Bold",
         fontSize=20,
         leading=24,
@@ -72,7 +72,7 @@ def report_title_style():
 
 def report_subtitle_style():
     return ParagraphStyle(
-        "CrosbytechReportSubtitle",
+        "TestPilotReportSubtitle",
         fontName="Helvetica",
         fontSize=10.5,
         leading=14,
@@ -83,7 +83,7 @@ def report_subtitle_style():
 
 def section_heading_style():
     return ParagraphStyle(
-        "CrosbytechSectionHeading",
+        "TestPilotSectionHeading",
         fontName="Helvetica-Bold",
         fontSize=13,
         leading=16,
@@ -105,7 +105,7 @@ def build_report_header(subtitle_text, url, generated_str, plan_level):
         Website URL      | <url>
         Generated Date   | <date>   Plan Level | <plan>
 
-    Matches Crosbytech_Report_Template_With_Logo.pdf section 0/1.
+    Matches TestPilot_Report_Template_With_Logo.pdf section 0/1.
     Returns a list of flowables ready to extend() onto the story.
     """
 

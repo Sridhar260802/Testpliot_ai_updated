@@ -28,18 +28,32 @@ def basic_content_validation(url: str):
         word_count = len(text_content.split())
 
         issues = []
+        recommendations = []
 
         if not title:
             issues.append("Missing <title> tag.")
+            recommendations.append("Add a unique, descriptive <title> tag to every page.")
 
         if not meta_description or not meta_description.get("content", "").strip():
             issues.append("Missing meta description.")
+            recommendations.append(
+                "Write a 120-155 character meta description summarizing the page."
+            )
 
         if not headings:
             issues.append("No heading tags (h1/h2/h3) found.")
+            recommendations.append(
+                "Structure the page with h1/h2/h3 headings to help readers and search engines."
+            )
 
         if word_count < 100:
             issues.append("Thin content: page has fewer than 100 words.")
+            recommendations.append(
+                "Expand the page to at least a few hundred words of unique, useful content."
+            )
+
+        if not recommendations:
+            recommendations.append("Content looks solid. Keep it updated regularly.")
 
         score = 100 - (len(issues) * 20)
         score = max(score, 0)
@@ -51,6 +65,7 @@ def basic_content_validation(url: str):
             "heading_count": len(headings),
             "word_count": word_count,
             "issues": issues,
+            "recommendations": recommendations,
             "status": "PASS" if not issues else "FAIL",
         }
 
@@ -62,6 +77,7 @@ def basic_content_validation(url: str):
             "heading_count": 0,
             "word_count": 0,
             "issues": [f"Could not validate content: {str(e)}"],
+            "recommendations": ["Verify the website URL or internet connection."],
             "status": "FAIL",
         }
 
@@ -93,12 +109,22 @@ def basic_image_validation(url: str):
                 missing_src += 1
 
         issues = []
+        recommendations = []
 
         if missing_alt:
             issues.append(f"{missing_alt} image(s) missing alt text.")
+            recommendations.append(
+                "Add descriptive alt text to every image for accessibility and image SEO."
+            )
 
         if missing_src:
             issues.append(f"{missing_src} image(s) missing a src attribute.")
+            recommendations.append(
+                "Make sure every <img> tag has a valid, working src attribute."
+            )
+
+        if not recommendations:
+            recommendations.append("Images look well optimized. No action needed.")
 
         if total_images == 0:
             score = 100
@@ -112,6 +138,7 @@ def basic_image_validation(url: str):
             "missing_alt": missing_alt,
             "missing_src": missing_src,
             "issues": issues,
+            "recommendations": recommendations,
             "status": "PASS" if not issues else "FAIL",
         }
 
@@ -122,5 +149,6 @@ def basic_image_validation(url: str):
             "missing_alt": 0,
             "missing_src": 0,
             "issues": [f"Could not validate images: {str(e)}"],
+            "recommendations": ["Verify the website URL or internet connection."],
             "status": "FAIL",
         }

@@ -8,10 +8,11 @@ const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || "http://localhost:800
 
 /* ------------------------------------------------------------------ */
 /* Design tokens (see comment block at bottom of file for the plan)    */
-/*   ink    #14181B   paper  #F1ECDF   card  #FFFFFF                   */
-/*   flag   #E4572E  (issues / primary CTA)                            */
-/*   pass   #1F5C45  (checks / secondary accent)                       */
-/*   line   rgba(20,24,27,.14)                                         */
+/*   Colors now live as CSS variables on .tp-root so the whole page    */
+/*   can flip to a dark theme by toggling a `.dark` class — see the    */
+/*   <style> block at the bottom for both palettes.                   */
+/*   accent flag  #E4572E  (issues / primary CTA) — same both themes   */
+/*   accent pass  #1F5C45  (checks / secondary accent) — same both     */
 /* ------------------------------------------------------------------ */
 
 function useReportFonts() {
@@ -24,6 +25,22 @@ function useReportFonts() {
       "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap";
     document.head.appendChild(link);
   }, []);
+}
+
+/** Reads/writes the theme preference and keeps it in sync across tabs. */
+function useTheme() {
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === "undefined") return "light";
+    const stored = window.localStorage.getItem("tp-theme");
+    if (stored === "light" || stored === "dark") return stored;
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem("tp-theme", theme);
+  }, [theme]);
+
+  return [theme, setTheme];
 }
 
 const SCAN_LOG = [
@@ -39,6 +56,7 @@ const SCAN_LOG = [
 
 export default function Dashboard() {
   useReportFonts();
+  const [theme, setTheme] = useTheme();
 
   const [user, setUser] = useState(getStoredUser());
   const [stats, setStats] = useState({ reportsGenerated: null, websitesTested: null });
@@ -46,7 +64,6 @@ export default function Dashboard() {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [scrollProgress, setScrollProgress] = useState(0);
-  const [pricingTab, setPricingTab] = useState("web");
 
   useEffect(() => {
     // Refresh from the server in case the plan changed elsewhere.
@@ -136,28 +153,34 @@ export default function Dashboard() {
   const plan = user?.plan || "basic";
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#F1ECDF] text-[#14181B]">
+    <div
+      className={`tp-root relative min-h-screen overflow-hidden bg-[var(--paper)] text-[var(--ink)] transition-colors duration-500 ${
+        theme === "dark" ? "dark" : ""
+      }`}
+    >
       {/* Paper grid + noise field */}
-      <div className="pointer-events-none fixed inset-0 -z-0" aria-hidden="true">
+      <div className="pointer-events-none fixed inset-0 -z-0 transition-colors duration-500" aria-hidden="true">
         <div
-          className="absolute inset-0 opacity-[0.05]"
+          className="absolute inset-0 opacity-[0.05] transition-opacity duration-500"
           style={{
             backgroundImage:
-              "linear-gradient(#14181B 1px, transparent 1px), linear-gradient(90deg, #14181B 1px, transparent 1px)",
+              "linear-gradient(var(--ink) 1px, transparent 1px), linear-gradient(90deg, var(--ink) 1px, transparent 1px)",
             backgroundSize: "36px 36px",
           }}
         />
-        <div className="absolute right-[-8%] top-[8%] h-[420px] w-[420px] rounded-full bg-[#E4572E]/[0.06] blur-[100px]" />
-        <div className="absolute left-[-10%] bottom-[10%] h-[380px] w-[380px] rounded-full bg-[#1F5C45]/[0.08] blur-[100px]" />
+        <div className="absolute right-[-8%] top-[8%] h-[420px] w-[420px] rounded-full bg-[#E4572E]/[0.06] blur-[100px] animate-[floatOrb_14s_ease-in-out_infinite]" />
+        <div className="absolute left-[-10%] bottom-[10%] h-[380px] w-[380px] rounded-full bg-[#1F5C45]/[0.08] blur-[100px] animate-[floatOrb_18s_ease-in-out_infinite_reverse]" />
       </div>
 
       {/* Scroll meter — a readout, not a bar */}
-      <div className="fixed left-0 top-0 z-50 h-[3px] w-full bg-[#14181B]/[0.06]">
+      <div className="fixed left-0 top-0 z-50 h-[3px] w-full bg-[var(--ink)]/[0.06]">
         <div
           className="h-full bg-[#E4572E] transition-[width] duration-150 ease-out"
           style={{ width: `${scrollProgress * 100}%` }}
         />
       </div>
+
+      <ThemeToggle theme={theme} onToggle={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} />
 
       <Navbar />
 
@@ -165,7 +188,7 @@ export default function Dashboard() {
         {/* ---------------------------------------------------------- */}
         {/* Hero — printed inspection-report header                    */}
         {/* ---------------------------------------------------------- */}
-        <div className="relative overflow-hidden rounded-md border border-[#14181B]/12 bg-white shadow-[0_1px_0_#14181B14] animate-[cardRise_0.55s_cubic-bezier(0.22,1,0.36,1)_both]">
+        <div className="relative overflow-hidden rounded-md border border-[var(--ink)]/12 bg-[var(--card)] shadow-[0_1px_0_rgba(0,0,0,0.08)] transition-colors duration-500 animate-[cardRise_0.55s_cubic-bezier(0.22,1,0.36,1)_both]">
           <ScanSweep />
 
           <div className="relative flex flex-col justify-between gap-8 p-8 sm:flex-row sm:items-start sm:p-12">
@@ -187,27 +210,24 @@ export default function Dashboard() {
               >
                 Welcome back{user?.username ? `, ${user.username}` : ""}.
               </h1>
-              <p className="mt-3 max-w-md text-sm leading-relaxed text-[#14181B]/60 animate-[fadeIn_0.4s_ease-out_0.18s_both]">
-                Crosbytech runs a full inspection of your site — SEO, accessibility, performance,
+              <p className="mt-3 max-w-md text-sm leading-relaxed text-[var(--ink)]/60 animate-[fadeIn_0.4s_ease-out_0.18s_both]">
+                TestPilot runs a full inspection of your site — SEO, accessibility, performance,
                 security — and files it as a report you can act on.
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3 animate-[fadeIn_0.4s_ease-out_0.24s_both]">
                 <Link
                   to="/test"
-                  className="rounded-sm bg-[#14181B] px-5 py-2.5 text-sm font-semibold text-[#F1ECDF] transition-all duration-200 hover:bg-[#E4572E] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E4572E] active:scale-[0.98]"
+                  className="group relative overflow-hidden rounded-sm bg-[var(--ink)] px-5 py-2.5 text-sm font-semibold text-[var(--paper)] transition-all duration-300 hover:bg-[#E4572E] hover:text-white hover:shadow-[0_10px_28px_-10px_rgba(228,87,46,0.55)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E4572E] active:scale-[0.98]"
                 >
-                  Test a website →
-                </Link>
-                <Link
-                  to="/mobile-test"
-                  className="rounded-sm border border-[#1F5C45]/40 bg-[#1F5C45]/[0.06] px-5 py-2.5 text-sm font-semibold text-[#1F5C45] transition-all duration-200 hover:border-[#1F5C45] hover:bg-[#1F5C45] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5C45] active:scale-[0.98]"
-                >
-                  Test a mobile app (APK/IPA) →
+                  <span className="relative inline-flex items-center gap-1.5">
+                    Test a website
+                    <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+                  </span>
                 </Link>
                 <Link
                   to="/pricing"
-                  className="rounded-sm border border-[#14181B]/25 px-5 py-2.5 text-sm font-semibold text-[#14181B] transition-all duration-200 hover:border-[#14181B] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14181B] active:scale-[0.98]"
+                  className="rounded-sm border border-[var(--ink)]/25 px-5 py-2.5 text-sm font-semibold text-[var(--ink)] transition-all duration-300 hover:border-[var(--ink)] hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ink)] active:scale-[0.98]"
                 >
                   View plans
                 </Link>
@@ -216,9 +236,9 @@ export default function Dashboard() {
 
             {/* Live scan readout ticker */}
             <div className="w-full max-w-[280px] shrink-0 animate-[fadeIn_0.4s_ease-out_0.3s_both]">
-              <div className="flex items-center justify-between border-b border-[#14181B]/10 pb-2">
+              <div className="flex items-center justify-between border-b border-[var(--ink)]/10 pb-2">
                 <span
-                  className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#14181B]/40"
+                  className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--ink)]/40"
                   style={{ fontFamily: "'IBM Plex Mono', monospace" }}
                 >
                   scan.log
@@ -231,7 +251,7 @@ export default function Dashboard() {
                 </span>
               </div>
               <ul
-                className="mt-2 space-y-1.5 text-[11px] leading-relaxed text-[#14181B]/55"
+                className="mt-2 space-y-1.5 text-[11px] leading-relaxed text-[var(--ink)]/55"
                 style={{ fontFamily: "'IBM Plex Mono', monospace" }}
               >
                 {SCAN_LOG.map((line, i) => (
@@ -260,12 +280,12 @@ export default function Dashboard() {
         {/* Ledger — stat row                                           */}
         {/* ---------------------------------------------------------- */}
         <p
-          className="mt-9 text-[11px] font-semibold uppercase tracking-[0.25em] text-[#14181B]/40 animate-[fadeIn_0.4s_ease-out_0.3s_both]"
+          className="mt-9 text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--ink)]/40 animate-[fadeIn_0.4s_ease-out_0.3s_both]"
           style={{ fontFamily: "'IBM Plex Mono', monospace" }}
         >
           Account ledger
         </p>
-        <div className="mt-3 grid grid-cols-1 divide-y divide-[#14181B]/10 rounded-md border border-[#14181B]/12 bg-white sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <div className="mt-3 grid grid-cols-1 divide-y divide-[var(--ink)]/10 rounded-md border border-[var(--ink)]/12 bg-[var(--card)] transition-colors duration-500 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           <LedgerCell label="Current plan" value={planLabel(plan)} delay={0.34} />
           <LedgerCell
             label="Reports generated"
@@ -298,40 +318,40 @@ export default function Dashboard() {
               <h2 className="mt-1.5 text-2xl font-semibold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                 Recent audits
               </h2>
-              <p className="mt-1.5 text-sm text-[#14181B]/55">Every site you've run through Crosbytech, most recent first.</p>
+              <p className="mt-1.5 text-sm text-[var(--ink)]/55">Every site you've run through TestPilot, most recent first.</p>
             </div>
             {history.length > 0 && (
               <Link
                 to="/history"
-                className="hidden shrink-0 text-xs font-semibold text-[#14181B] underline decoration-[#E4572E] decoration-2 underline-offset-4 transition-colors duration-200 hover:text-[#E4572E] sm:inline"
+                className="hidden shrink-0 text-xs font-semibold text-[var(--ink)] underline decoration-[#E4572E] decoration-2 underline-offset-4 transition-colors duration-200 hover:text-[#E4572E] sm:inline"
               >
                 View full history →
               </Link>
             )}
           </div>
 
-          <div className="mt-6 overflow-hidden rounded-md border border-[#14181B]/12 bg-white">
+          <div className="mt-6 overflow-hidden rounded-md border border-[var(--ink)]/12 bg-[var(--card)] transition-colors duration-500">
             {historyLoading && (
               <div className="p-5">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-4 border-b border-[#14181B]/8 py-3 last:border-0">
-                    <span className="h-2 w-2 rounded-full bg-[#14181B]/10" />
-                    <span className="h-4 flex-1 animate-pulse rounded bg-[#14181B]/8" />
-                    <span className="h-4 w-8 animate-pulse rounded bg-[#14181B]/8" />
+                  <div key={i} className="flex items-center gap-4 border-b border-[var(--ink)]/8 py-3 last:border-0">
+                    <span className="h-2 w-2 rounded-full bg-[var(--ink)]/10 animate-pulse" />
+                    <span className="h-4 flex-1 animate-pulse rounded bg-[var(--ink)]/8" />
+                    <span className="h-4 w-8 animate-pulse rounded bg-[var(--ink)]/8" />
                   </div>
                 ))}
               </div>
             )}
 
             {!historyLoading && history.length === 0 && (
-              <div className="p-8 text-center">
-                <p className="text-sm font-semibold text-[#14181B]">No audits filed yet</p>
-                <p className="mt-1 text-xs text-[#14181B]/50">Run your first test and it'll show up here.</p>
+              <div className="p-8 text-center animate-[fadeIn_0.4s_ease-out_both]">
+                <p className="text-sm font-semibold text-[var(--ink)]">No audits filed yet</p>
+                <p className="mt-1 text-xs text-[var(--ink)]/50">Run your first test and it'll show up here.</p>
               </div>
             )}
 
             {!historyLoading && history.length > 0 && (
-              <div className="divide-y divide-[#14181B]/10">
+              <div className="divide-y divide-[var(--ink)]/10">
                 {history.map((entry, i) => (
                   <HistoryRow key={entry.id} entry={entry} delay={0.04 * i} />
                 ))}
@@ -342,7 +362,7 @@ export default function Dashboard() {
           {history.length > 0 && (
             <Link
               to="/history"
-              className="mt-3 inline-block text-xs font-semibold text-[#14181B] underline decoration-[#E4572E] decoration-2 underline-offset-4 sm:hidden"
+              className="mt-3 inline-block text-xs font-semibold text-[var(--ink)] underline decoration-[#E4572E] decoration-2 underline-offset-4 sm:hidden"
             >
               View full history →
             </Link>
@@ -355,12 +375,12 @@ export default function Dashboard() {
         <Reveal className="mt-12">
           <SectionEyebrow>Process log</SectionEyebrow>
           <h2 className="mt-1.5 text-2xl font-semibold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            How Crosbytech works
+            How TestPilot works
           </h2>
-          <p className="mt-1.5 text-sm text-[#14181B]/55">Three entries between you and a full audit of your site.</p>
+          <p className="mt-1.5 text-sm text-[var(--ink)]/55">Three entries between you and a full audit of your site.</p>
 
           <div className="relative mt-8 grid grid-cols-1 gap-0 sm:grid-cols-3">
-            <span className="pointer-events-none absolute left-0 right-0 top-[22px] hidden border-t border-dashed border-[#14181B]/20 sm:block" />
+            <span className="pointer-events-none absolute left-0 right-0 top-[22px] hidden border-t border-dashed border-[var(--ink)]/20 sm:block" />
             <ProcessStep n="01" title="Drop your URL" text="Paste any live website — no setup, no code to install." delay={0.1} />
             <ProcessStep n="02" title="We run real checks" text="Automated tests crawl your site live and score it across every category." delay={0.18} />
             <ProcessStep n="03" title="Get your PDF report" text="A clear, filed report with scores and concrete recommendations." delay={0.26} />
@@ -375,9 +395,9 @@ export default function Dashboard() {
           <h2 className="mt-1.5 text-2xl font-semibold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
             What we test
           </h2>
-          <p className="mt-1.5 text-sm text-[#14181B]/55">Every audit checks these — depth scales with your plan.</p>
+          <p className="mt-1.5 text-sm text-[var(--ink)]/55">Every audit checks these — depth scales with your plan.</p>
 
-          <div className="mt-6 divide-y divide-[#14181B]/10 rounded-md border border-[#14181B]/12 bg-white">
+          <div className="mt-6 divide-y divide-[var(--ink)]/10 rounded-md border border-[var(--ink)]/12 bg-[var(--card)] transition-colors duration-500">
             {FEATURES.map((f, i) => (
               <ChecklistRow key={f.title} {...f} delay={0.05 + i * 0.04} />
             ))}
@@ -392,7 +412,7 @@ export default function Dashboard() {
           <h2 className="mt-1.5 text-2xl font-semibold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
             Questions, answered
           </h2>
-          <p className="mt-1.5 text-sm text-[#14181B]/55">Everything worth knowing before your first audit.</p>
+          <p className="mt-1.5 text-sm text-[var(--ink)]/55">Everything worth knowing before your first audit.</p>
 
           <FaqAccordion items={FAQ_ITEMS} />
         </Reveal>
@@ -407,50 +427,25 @@ export default function Dashboard() {
               <h2 className="mt-1.5 text-2xl font-semibold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                 Plans built around your testing needs
               </h2>
-              <p className="mt-1.5 text-sm text-[#14181B]/55">Upgrade any time — every plan includes a full PDF report.</p>
+              <p className="mt-1.5 text-sm text-[var(--ink)]/55">Upgrade any time — every plan includes a full PDF report.</p>
             </div>
             <Link
               to="/pricing"
-              className="hidden shrink-0 text-xs font-semibold text-[#14181B] underline decoration-[#E4572E] decoration-2 underline-offset-4 transition-colors duration-200 hover:text-[#E4572E] sm:inline"
+              className="hidden shrink-0 text-xs font-semibold text-[var(--ink)] underline decoration-[#E4572E] decoration-2 underline-offset-4 transition-colors duration-200 hover:text-[#E4572E] sm:inline"
             >
               See full comparison →
             </Link>
           </div>
 
-          {/* Website Testing / APK Testing toggle */}
-          <div className="relative mx-auto mt-6 flex w-fit rounded-full border border-[#14181B]/12 bg-white p-1">
-            <span
-              className="absolute h-8 w-[124px] rounded-full bg-[#14181B] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-              style={{ transform: pricingTab === "web" ? "translateX(4px)" : "translateX(132px)" }}
-              aria-hidden="true"
-            />
-            {[
-              { id: "web", label: "Website testing" },
-              { id: "apk", label: "APK testing" },
-            ].map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setPricingTab(t.id)}
-                aria-pressed={pricingTab === t.id}
-                className={`relative z-10 w-[124px] rounded-full py-1.5 text-xs font-semibold transition-colors duration-300 ${
-                  pricingTab === t.id ? "text-white" : "text-[#14181B]/55 hover:text-[#14181B]"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          <div key={pricingTab} className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-3 animate-[fadeIn_0.35s_ease-out_both]">
-            {(pricingTab === "web" ? PRICING_PREVIEW : MOBILE_PRICING_PREVIEW).map((p, i) => (
+          <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-3 animate-[fadeIn_0.35s_ease-out_both]">
+            {PRICING_PREVIEW.map((p, i) => (
               <TicketCard key={p.id} {...p} isCurrent={plan === p.id} delay={0.1 + i * 0.08} />
             ))}
           </div>
 
           <Link
             to="/pricing"
-            className="mt-5 inline-block text-xs font-semibold text-[#14181B] underline decoration-[#E4572E] decoration-2 underline-offset-4 sm:hidden"
+            className="mt-5 inline-block text-xs font-semibold text-[var(--ink)] underline decoration-[#E4572E] decoration-2 underline-offset-4 sm:hidden"
           >
             See full comparison →
           </Link>
@@ -464,13 +459,13 @@ export default function Dashboard() {
           <h2 className="mt-1.5 text-2xl font-semibold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
             Get in touch
           </h2>
-          <p className="mt-1.5 text-sm text-[#14181B]/55">Questions about a report or your plan? We're here to help.</p>
+          <p className="mt-1.5 text-sm text-[var(--ink)]/55">Questions about a report or your plan? We're here to help.</p>
 
-          <div className="mt-6 flex justify-center rounded-md border border-[#14181B]/12 bg-white">
+          <div className="mt-6 flex justify-center rounded-md border border-[var(--ink)]/12 bg-[var(--card)] transition-colors duration-500">
             <DirectoryCell
               label="Email"
-              value="support@crosbytech.com"
-              href="mailto:support@crosbytech.com"
+              value="support@TestPilot.com"
+              href="mailto:support@TestPilot.com"
               delay={0.1}
               className="text-center"
             />
@@ -478,10 +473,10 @@ export default function Dashboard() {
         </Reveal>
 
         {/* ---------------------------------------------------------- */}
-        {/* Closing stamp                                               */}
+        {/* Closing stamp — always dark, reads the same in both themes  */}
         {/* ---------------------------------------------------------- */}
         <Reveal className="mb-10">
-          <div className="relative overflow-hidden rounded-md border border-[#14181B]/12 bg-[#14181B] p-8 text-center text-white sm:p-10">
+          <div className="relative overflow-hidden rounded-md border border-[var(--ink)]/12 bg-[#14181B] p-8 text-center text-white transition-transform duration-300 hover:-translate-y-1 sm:p-10">
             <div
               className="pointer-events-none absolute inset-0 opacity-[0.04]"
               style={{
@@ -506,19 +501,10 @@ export default function Dashboard() {
             <div className="relative mt-5 flex flex-wrap items-center justify-center gap-3">
               <Link
                 to="/test"
-                className="inline-flex items-center gap-2 rounded-sm bg-[#E4572E] px-6 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-[#F16A40] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-[0.98]"
+                className="group inline-flex items-center gap-2 rounded-sm bg-[#E4572E] px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-[#F16A40] hover:shadow-[0_12px_30px_-10px_rgba(228,87,46,0.6)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-[0.98]"
               >
                 Test a website
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M5 12h14M13 6l6 6-6 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </Link>
-              <Link
-                to="/mobile-test"
-                className="inline-flex items-center gap-2 rounded-sm border border-white/25 px-6 py-3 text-sm font-semibold text-white transition-all duration-200 hover:border-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-[0.98]"
-              >
-                Test a mobile app
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="transition-transform duration-300 group-hover:translate-x-1">
                   <path d="M5 12h14M13 6l6 6-6 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </Link>
@@ -530,6 +516,19 @@ export default function Dashboard() {
       <Footer />
 
       <style>{`
+        .tp-root {
+          --ink: #14181B;
+          --paper: #F1ECDF;
+          --card: #FFFFFF;
+          --track: rgba(20, 24, 27, 0.08);
+        }
+        .tp-root.dark {
+          --ink: #F1ECDF;
+          --paper: #0B0D0E;
+          --card: #171B1E;
+          --track: rgba(241, 236, 223, 0.14);
+        }
+
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
@@ -557,6 +556,10 @@ export default function Dashboard() {
           60% { opacity: 1; transform: rotate(-8deg) scale(0.94); }
           100% { opacity: 1; transform: rotate(-8deg) scale(1); }
         }
+        @keyframes stampBreathe {
+          0%, 100% { transform: rotate(-8deg) scale(1); }
+          50% { transform: rotate(-8deg) scale(1.04); }
+        }
         @keyframes marquee {
           from { transform: translateX(0); }
           to { transform: translateX(-50%); }
@@ -573,6 +576,14 @@ export default function Dashboard() {
           from { stroke-dashoffset: var(--ring-circumference); }
           to { stroke-dashoffset: var(--ring-offset); }
         }
+        @keyframes floatOrb {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50% { transform: translate(-14px, 18px) scale(1.06); }
+        }
+        @keyframes toggleSpin {
+          from { transform: rotate(0deg) scale(0.6); opacity: 0; }
+          to { transform: rotate(0deg) scale(1); opacity: 1; }
+        }
         @media (prefers-reduced-motion: reduce) {
           *, *::before, *::after {
             animation-duration: 0.01ms !important;
@@ -582,6 +593,47 @@ export default function Dashboard() {
         }
       `}</style>
     </div>
+  );
+}
+
+/** Fixed sun/moon toggle — flips the `dark` class + CSS variables on the root. */
+function ThemeToggle({ theme, onToggle }) {
+  const isDark = theme === "dark";
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+      title={isDark ? "Switch to light theme" : "Switch to dark theme"}
+      className="fixed right-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full border border-[var(--ink)]/15 bg-[var(--card)] text-[var(--ink)] shadow-[0_4px_14px_-6px_rgba(0,0,0,0.25)] transition-all duration-300 hover:scale-110 hover:border-[#E4572E] hover:text-[#E4572E] active:scale-95 sm:right-6 sm:top-6"
+      
+    >
+      
+      <span key={theme} className="animate-[toggleSpin_0.35s_cubic-bezier(0.22,1,0.36,1)_both]">
+        {isDark ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
+              fill="currentColor"
+            />
+          </svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.5" fill="currentColor" />
+            <g stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <line x1="12" y1="1.5" x2="12" y2="4" />
+              <line x1="12" y1="20" x2="12" y2="22.5" />
+              <line x1="1.5" y1="12" x2="4" y2="12" />
+              <line x1="20" y1="12" x2="22.5" y2="12" />
+              <line x1="4.2" y1="4.2" x2="6" y2="6" />
+              <line x1="18" y1="18" x2="19.8" y2="19.8" />
+              <line x1="4.2" y1="19.8" x2="6" y2="18" />
+              <line x1="18" y1="6" x2="19.8" y2="4.2" />
+            </g>
+          </svg>
+        )}
+      </span>
+    </button>
   );
 }
 
@@ -604,9 +656,9 @@ function ScanSweep() {
   );
 }
 
-/** Rotated ink-stamp badge showing the user's plan tier — presses in on load. */
+/** Rotated ink-stamp badge showing the user's plan tier — presses in on load, then breathes gently. */
 function StampBadge({ plan }) {
-  const label = plan === "premium" ? "PREMIUM" : plan === "standard" ? "STANDARD" : "BASIC";
+  const label = plan === "premium" ? "PREMIUM" : plan === "standard" ? "STANDARD" : plan === "basic" ? "BASIC" : "No Plan";
   const color = plan === "premium" ? "#E4572E" : "#1F5C45";
   return (
     <div
@@ -615,7 +667,8 @@ function StampBadge({ plan }) {
         color,
         borderColor: color,
         fontFamily: "'IBM Plex Mono', monospace",
-        animation: "stampIn 0.5s cubic-bezier(0.22,1,0.36,1) 1.1s both",
+        animation:
+          "stampIn 0.5s cubic-bezier(0.22,1,0.36,1) 1.1s both, stampBreathe 3.2s ease-in-out 1.7s infinite",
       }}
     >
       {label}
@@ -625,7 +678,7 @@ function StampBadge({ plan }) {
 
 const TICKER_ITEMS = [
   "SEO", "Accessibility", "Performance", "Security", "Content & UX",
-  "Browser compatibility", "Mobile app security",
+  "Browser compatibility",
 ];
 
 /** Thin scrolling strip of what gets checked — reinforces the "live log" motif from the hero. */
@@ -633,16 +686,16 @@ function MarqueeStrip() {
   const loop = [...TICKER_ITEMS, ...TICKER_ITEMS];
   return (
     <div
-      className="relative mt-6 overflow-hidden rounded-md border border-[#14181B]/12 bg-white py-3 animate-[fadeIn_0.4s_ease-out_0.36s_both]"
+      className="relative mt-6 overflow-hidden rounded-md border border-[var(--ink)]/12 bg-[var(--card)] py-3 transition-colors duration-500 animate-[fadeIn_0.4s_ease-out_0.36s_both]"
       aria-hidden="true"
     >
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-14 bg-gradient-to-r from-white to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-14 bg-gradient-to-l from-white to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-14 bg-gradient-to-r from-[var(--card)] to-transparent transition-colors duration-500" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-14 bg-gradient-to-l from-[var(--card)] to-transparent transition-colors duration-500" />
       <div className="flex w-max animate-[marquee_24s_linear_infinite] gap-10 whitespace-nowrap px-4 hover:[animation-play-state:paused]">
         {loop.map((item, i) => (
           <span
             key={i}
-            className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#14181B]/40"
+            className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--ink)]/40"
             style={{ fontFamily: "'IBM Plex Mono', monospace" }}
           >
             <span className="h-1.5 w-1.5 rounded-full bg-[#1F5C45]" />
@@ -666,7 +719,7 @@ function ScoreGauge({ score }) {
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#14181B14" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--track)" strokeWidth={stroke} />
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -687,32 +740,33 @@ function ScoreGauge({ score }) {
         className="absolute inset-0 flex flex-col items-center justify-center"
         style={{ fontFamily: "'IBM Plex Mono', monospace" }}
       >
-        <span className="text-lg font-bold text-[#14181B] animate-[numberIn_0.3s_ease-out_0.6s_both]">
+        <span className="text-lg font-bold text-[var(--ink)] animate-[numberIn_0.3s_ease-out_0.6s_both]">
           <CountUp value={score} duration={900} />
         </span>
-        <span className="text-[8px] font-semibold uppercase tracking-[0.15em] text-[#14181B]/40">score</span>
+        <span className="text-[8px] font-semibold uppercase tracking-[0.15em] text-[var(--ink)]/40">score</span>
       </div>
     </div>
   );
 }
 
-/** A small illustrative mock of what a filed report actually looks like — score bars + summary lines. */
+/** A small illustrative mock of what a filed report actually looks like — kept paper-toned on purpose, */
+/** as if it's a physical printout, regardless of the site's own theme.                                 */
 function ReportPreviewCard() {
   return (
-    <div className="group relative overflow-hidden rounded-md border border-[#14181B]/12 bg-white p-6 transition-shadow duration-300 hover:shadow-[0_16px_36px_-16px_rgba(20,24,27,0.18)] sm:p-8">
+    <div className="group relative overflow-hidden rounded-md border border-[var(--ink)]/12 bg-[var(--card)] p-6 transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_16px_36px_-16px_rgba(0,0,0,0.28)] sm:p-8">
       <div className="flex flex-col gap-8 sm:flex-row sm:items-center">
         <div className="flex-1">
           <SectionEyebrow>Inside every report</SectionEyebrow>
           <h3 className="mt-2 text-xl font-semibold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
             A filed, scored, and readable PDF
           </h3>
-          <p className="mt-2 max-w-sm text-sm leading-relaxed text-[#14181B]/60">
+          <p className="mt-2 max-w-sm text-sm leading-relaxed text-[var(--ink)]/60">
             Every audit closes out the same way — an overall score, a category-by-category
             breakdown, and a plain-English list of what to fix first.
           </p>
         </div>
 
-        <div className="w-full max-w-[300px] shrink-0 rounded-sm border border-[#14181B]/12 bg-[#F1ECDF] p-5 transition-transform duration-300 group-hover:-translate-y-1.5 group-hover:rotate-[0.4deg]">
+        <div className="w-full max-w-[300px] shrink-0 rounded-sm border border-[#14181B]/12 bg-[#F1ECDF] p-5 text-[#14181B] transition-transform duration-500 group-hover:-translate-y-1.5 group-hover:rotate-[0.4deg]">
           <div className="flex items-center justify-between">
             <span
               className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#14181B]/40"
@@ -724,7 +778,7 @@ function ReportPreviewCard() {
           </div>
 
           <div className="mt-4 flex items-center gap-4">
-            <ScoreGauge score={82} />
+            <MockScoreGauge score={82} />
 
             <div className="flex-1 space-y-2.5">
               {[
@@ -767,14 +821,56 @@ function ReportPreviewCard() {
   );
 }
 
+/** Score ring used only inside the always-paper mock report — deliberately unthemed. */
+function MockScoreGauge({ score }) {
+  const size = 76;
+  const stroke = 7;
+  const r = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference * (1 - score / 100);
+  const color = score >= 80 ? "#1F5C45" : "#E4572E";
+
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#14181B14" strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          style={{
+            "--ring-circumference": circumference,
+            "--ring-offset": offset,
+            animation: "ringIn 1s cubic-bezier(0.22,1,0.36,1) 0.2s both",
+          }}
+        />
+      </svg>
+      <div
+        className="absolute inset-0 flex flex-col items-center justify-center"
+        style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+      >
+        <span className="text-lg font-bold text-[#14181B] animate-[numberIn_0.3s_ease-out_0.6s_both]">
+          <CountUp value={score} duration={900} />
+        </span>
+        <span className="text-[8px] font-semibold uppercase tracking-[0.15em] text-[#14181B]/40">score</span>
+      </div>
+    </div>
+  );
+}
+
 const FAQ_ITEMS = [
   {
-    q: "What can I test — websites, apps, or both?",
-    a: "Both. Run a website audit with just a URL, or upload a mobile .apk/.ipa for a static security scan — no install, device, or emulator needed either way.",
+    q: "What can I test?",
+    a: "Run a full website audit with just a URL — no install or setup needed.",
   },
   {
     q: "How long does a scan take?",
-    a: "Most website audits finish in a couple of minutes. Mobile scans depend on app size and plan depth — Premium's deep pass takes a little longer than Basic.",
+    a: "Most website audits finish in a couple of minutes, depending on your plan depth.",
   },
   {
     q: "Can I re-download an old report?",
@@ -784,10 +880,6 @@ const FAQ_ITEMS = [
     q: "What happens if I switch plans?",
     a: "Your new plan applies to your very next scan — nothing else to reconfigure.",
   },
-  {
-    q: "Do I need to install anything to test a mobile app?",
-    a: "No. Upload the .apk or .ipa file directly and we unpack and analyze it statically — your device or emulator never comes into it.",
-  },
 ];
 
 /** Single-open accordion, styled as filed questions rather than a generic FAQ widget. */
@@ -795,7 +887,7 @@ function FaqAccordion({ items }) {
   const [openIndex, setOpenIndex] = useState(0);
 
   return (
-    <div className="mt-6 divide-y divide-[#14181B]/10 rounded-md border border-[#14181B]/12 bg-white">
+    <div className="mt-6 divide-y divide-[var(--ink)]/10 rounded-md border border-[var(--ink)]/12 bg-[var(--card)] transition-colors duration-500">
       {items.map((item, i) => {
         const open = openIndex === i;
         return (
@@ -804,9 +896,9 @@ function FaqAccordion({ items }) {
               type="button"
               onClick={() => setOpenIndex(open ? -1 : i)}
               aria-expanded={open}
-              className="flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-200 hover:bg-[#1F5C45]/[0.04]"
+              className="flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-200 hover:bg-[#1F5C45]/[0.06]"
             >
-              <span className="text-sm font-semibold text-[#14181B]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              <span className="text-sm font-semibold text-[var(--ink)]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                 {item.q}
               </span>
               <svg
@@ -814,7 +906,7 @@ function FaqAccordion({ items }) {
                 height="14"
                 viewBox="0 0 24 24"
                 fill="none"
-                className="shrink-0 text-[#14181B]/40 transition-transform duration-300"
+                className="shrink-0 text-[var(--ink)]/40 transition-transform duration-300"
                 style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
               >
                 <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -825,7 +917,7 @@ function FaqAccordion({ items }) {
               style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
             >
               <div className="overflow-hidden">
-                <p className="px-5 pb-5 text-xs leading-relaxed text-[#14181B]/60">{item.a}</p>
+                <p className="px-5 pb-5 text-xs leading-relaxed text-[var(--ink)]/60">{item.a}</p>
               </div>
             </div>
           </div>
@@ -908,20 +1000,20 @@ function LedgerCell({ label, value, hint, delay = 0 }) {
   return (
     <div
       style={{ animation: `fadeIn 0.4s ease-out ${delay}s both` }}
-      className="group p-6 transition-colors duration-200 hover:bg-[#1F5C45]/[0.03]"
+      className="group p-6 transition-colors duration-200 hover:bg-[#1F5C45]/[0.05]"
     >
       <p
-        className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#14181B]/40"
+        className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--ink)]/40"
         style={{ fontFamily: "'IBM Plex Mono', monospace" }}
       >
         {label}
       </p>
       <p
-        className="mt-2 text-2xl font-semibold text-[#14181B] transition-transform duration-200 group-hover:translate-x-0.5"
+        className="mt-2 text-2xl font-semibold text-[var(--ink)] transition-transform duration-200 group-hover:translate-x-0.5"
         style={{ fontFamily: "'IBM Plex Mono', monospace" }}
       >
         {value == null ? (
-          <span className="inline-block h-6 w-10 animate-pulse rounded bg-[#14181B]/10 align-middle" />
+          <span className="inline-block h-6 w-10 animate-pulse rounded bg-[var(--ink)]/10 align-middle" />
         ) : isNumber ? (
           <span className="animate-[numberIn_0.3s_ease-out_both]">
             <CountUp value={value} />
@@ -930,7 +1022,7 @@ function LedgerCell({ label, value, hint, delay = 0 }) {
           value
         )}
       </p>
-      {hint && <p className="mt-1 text-xs text-[#14181B]/40">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-[var(--ink)]/40">{hint}</p>}
     </div>
   );
 }
@@ -967,7 +1059,7 @@ function HistoryRow({ entry, delay = 0 }) {
   return (
     <div
       style={{ animation: `fadeIn 0.35s ease-out ${delay}s both` }}
-      className="flex items-center gap-4 p-4 sm:p-5"
+      className="flex items-center gap-4 p-4 transition-colors duration-200 hover:bg-[var(--ink)]/[0.03] sm:p-5"
     >
       <span
         className="h-2 w-2 shrink-0 rounded-full"
@@ -976,24 +1068,24 @@ function HistoryRow({ entry, delay = 0 }) {
       />
       <div className="min-w-0 flex-1">
         <p
-          className="truncate text-sm font-semibold text-[#14181B]"
+          className="truncate text-sm font-semibold text-[var(--ink)]"
           style={{ fontFamily: "'IBM Plex Mono', monospace" }}
           title={entry.url}
         >
           {shortUrl(entry.url)}
         </p>
-        <p className="mt-0.5 text-xs text-[#14181B]/45">{relativeTime(entry.created_at)}</p>
+        <p className="mt-0.5 text-xs text-[var(--ink)]/45">{relativeTime(entry.created_at)}</p>
       </div>
       {entry.plan && (
         <span
-          className="hidden shrink-0 rounded-full border border-[#14181B]/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#14181B]/60 sm:inline-block"
+          className="hidden shrink-0 rounded-full border border-[var(--ink)]/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--ink)]/60 sm:inline-block"
           style={{ fontFamily: "'IBM Plex Mono', monospace" }}
         >
           {entry.plan}
         </span>
       )}
       <span
-        className="shrink-0 text-sm font-semibold"
+        className="shrink-0 text-sm font-semibold transition-transform duration-200 group-hover:scale-110"
         style={{ fontFamily: "'IBM Plex Mono', monospace", color: dotColor }}
       >
         {score}
@@ -1006,18 +1098,18 @@ function ProcessStep({ n, title, text, delay = 0 }) {
   return (
     <div
       style={{ animation: `fadeIn 0.45s ease-out ${delay}s both` }}
-      className="relative bg-[#F1ECDF] px-2 pt-0 pb-2 sm:px-6"
+      className="group relative bg-[var(--paper)] px-2 pt-0 pb-2 transition-colors duration-500 sm:px-6"
     >
       <span
-        className="relative z-10 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#14181B] bg-[#F1ECDF] text-xs font-bold text-[#14181B]"
+        className="relative z-10 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-[var(--ink)] bg-[var(--paper)] text-xs font-bold text-[var(--ink)] transition-transform duration-300 group-hover:scale-110 group-hover:border-[#E4572E] group-hover:text-[#E4572E]"
         style={{ fontFamily: "'IBM Plex Mono', monospace" }}
       >
         {n}
       </span>
-      <h3 className="mt-4 text-sm font-semibold text-[#14181B]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+      <h3 className="mt-4 text-sm font-semibold text-[var(--ink)]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
         {title}
       </h3>
-      <p className="mt-1.5 text-xs leading-relaxed text-[#14181B]/55">{text}</p>
+      <p className="mt-1.5 text-xs leading-relaxed text-[var(--ink)]/55">{text}</p>
     </div>
   );
 }
@@ -1029,39 +1121,24 @@ const FEATURES = [
   { title: "Security", text: "SSL setup, exposed headers, and common vulnerability patterns." },
   { title: "Content & UX", text: "Broken links, missing images, and copy or layout inconsistencies." },
   { title: "Browser compatibility", text: "Rendering checks across common browsers and screen sizes." },
-  {
-    title: "Mobile app security",
-    text: "Upload an .apk or .ipa — permissions, exported components, hardcoded secrets, and weak crypto.",
-    isMobile: true,
-  },
 ];
 
-function ChecklistRow({ title, text, delay = 0, isMobile = false }) {
-  const Wrapper = isMobile ? Link : "div";
+function ChecklistRow({ title, text, delay = 0 }) {
   return (
-    <Wrapper
-      {...(isMobile ? { to: "/mobile-test" } : {})}
+    <div
       style={{ animation: `fadeIn 0.4s ease-out ${delay}s both` }}
-      className="group flex items-start gap-4 p-5 transition-colors duration-200 hover:bg-[#1F5C45]/[0.04]"
+      className="group flex items-start gap-4 p-5 transition-colors duration-200 hover:bg-[#1F5C45]/[0.05]"
     >
       <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-[#1F5C45] text-[11px] font-bold text-[#1F5C45] transition-transform duration-300 group-hover:rotate-[360deg] group-hover:scale-110">
         ✓
       </span>
       <div>
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-[#14181B]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--ink)]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
           {title}
-          {isMobile && (
-            <span
-              className="rounded-full bg-[#1F5C45]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#1F5C45] transition-transform duration-200 group-hover:scale-105"
-              style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-            >
-              New
-            </span>
-          )}
         </h3>
-        <p className="mt-1 text-xs leading-relaxed text-[#14181B]/55">{text}</p>
+        <p className="mt-1 text-xs leading-relaxed text-[var(--ink)]/55">{text}</p>
       </div>
-    </Wrapper>
+    </div>
   );
 }
 
@@ -1077,25 +1154,15 @@ const PRICING_PREVIEW = [
   { id: "premium", name: "Premium", price: 1999, features: ["Full security audit", "Content, UX & CRO audits", "Combined full audit report"] },
 ];
 
-const MOBILE_PRICING_PREVIEW = [
-  { id: "basic", name: "Basic", price: 499, features: ["Android (.apk) security scan", "Sensitive permissions report", "Basic PDF report"] },
-  {
-    id: "standard",
-    name: "Standard",
-    price: 999,
-    features: ["Android & iOS (.apk / .ipa)", "Exported components audit", "Detailed PDF report"],
-    highlighted: true,
-  },
-  { id: "premium", name: "Premium", price: 1999, features: ["Hardcoded-secret scanning", "Weak-crypto detection", "Combined full audit report"] },
-];
-
 /** Pricing card styled like a perforated audit ticket / receipt stub. */
 function TicketCard({ id, name, price, features, highlighted, isCurrent, delay = 0 }) {
   return (
     <div
       style={{ animation: `cardRise 0.5s cubic-bezier(0.22,1,0.36,1) ${delay}s both` }}
-      className={`group relative flex flex-col rounded-md p-6 transition-all duration-300 hover:-translate-y-1.5 hover:rotate-[0.3deg] ${
-        highlighted ? "border-2 border-[#E4572E] bg-white shadow-[0_8px_24px_-8px_rgba(228,87,46,0.35)]" : "border border-[#14181B]/12 bg-white"
+      className={`group relative flex flex-col rounded-md p-6 transition-all duration-300 hover:-translate-y-1.5 hover:rotate-[0.3deg] hover:shadow-[0_16px_36px_-16px_rgba(0,0,0,0.3)] ${
+        highlighted
+          ? "border-2 border-[#E4572E] bg-[var(--card)] shadow-[0_8px_24px_-8px_rgba(228,87,46,0.35)]"
+          : "border border-[var(--ink)]/12 bg-[var(--card)]"
       }`}
     >
       {/* perforation edge */}
@@ -1104,7 +1171,7 @@ function TicketCard({ id, name, price, features, highlighted, isCurrent, delay =
         aria-hidden="true"
       >
         {Array.from({ length: 14 }).map((_, i) => (
-          <span key={i} className="h-3.5 w-3.5 rounded-full bg-[#F1ECDF]" />
+          <span key={i} className="h-3.5 w-3.5 rounded-full bg-[var(--paper)] transition-colors duration-500" />
         ))}
       </div>
 
@@ -1118,26 +1185,26 @@ function TicketCard({ id, name, price, features, highlighted, isCurrent, delay =
       )}
       {isCurrent && (
         <span
-          className="absolute -top-3 left-4 rounded-full bg-[#14181B] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white"
+          className="absolute -top-3 left-4 rounded-full bg-[var(--ink)] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-[var(--paper)] transition-colors duration-500"
           style={{ fontFamily: "'IBM Plex Mono', monospace" }}
         >
           Your plan
         </span>
       )}
 
-      <h3 className="mt-2 text-sm font-semibold text-[#14181B]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+      <h3 className="mt-2 text-sm font-semibold text-[var(--ink)]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
         {name}
       </h3>
       <div className="mt-2 flex items-baseline gap-1">
-        <span className="text-2xl font-bold text-[#14181B]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+        <span className="text-2xl font-bold text-[var(--ink)]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
           ₹{price}
         </span>
-        <span className="text-xs text-[#14181B]/40">/ report</span>
+        <span className="text-xs text-[var(--ink)]/40">/ report</span>
       </div>
 
-      <ul className="mt-4 flex-1 space-y-2 border-t border-dashed border-[#14181B]/15 pt-4">
+      <ul className="mt-4 flex-1 space-y-2 border-t border-dashed border-[var(--ink)]/15 pt-4">
         {features.map((f) => (
-          <li key={f} className="flex items-start gap-2 text-xs text-[#14181B]/70">
+          <li key={f} className="flex items-start gap-2 text-xs text-[var(--ink)]/70">
             <span className="mt-0.5 text-[#1F5C45]">✓</span>
             {f}
           </li>
@@ -1147,7 +1214,7 @@ function TicketCard({ id, name, price, features, highlighted, isCurrent, delay =
       <Link
         to={`/checkout?plan=${id}`}
         className={`mt-5 w-full rounded-sm py-2.5 text-center text-xs font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
-          highlighted ? "bg-[#E4572E] text-white hover:bg-[#F16A40]" : "bg-[#14181B] text-white hover:bg-black"
+          highlighted ? "bg-[#E4572E] text-white hover:bg-[#F16A40]" : "bg-[var(--ink)] text-[var(--paper)] hover:bg-black hover:text-white"
         }`}
       >
         {isCurrent ? "Current plan" : `Choose ${name}`}
@@ -1162,15 +1229,15 @@ function DirectoryCell({ label, value, href, delay = 0, className = "" }) {
     <Wrapper
       {...(href ? { href } : {})}
       style={{ animation: `fadeIn 0.4s ease-out ${delay}s both` }}
-      className={`group rounded-md p-6 transition-colors duration-200 hover:bg-[#1F5C45]/[0.04] ${className}`}
+      className={`group rounded-md p-6 transition-colors duration-200 hover:bg-[#1F5C45]/[0.05] ${className}`}
     >
       <p
-        className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#14181B]/40"
+        className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--ink)]/40"
         style={{ fontFamily: "'IBM Plex Mono', monospace" }}
       >
         {label}
       </p>
-      <p className="mt-1 text-sm font-semibold text-[#14181B] transition-transform duration-200 group-hover:translate-x-0.5">
+      <p className="mt-1 text-sm font-semibold text-[var(--ink)] transition-transform duration-200 group-hover:translate-x-0.5">
         {value}
       </p>
     </Wrapper>
@@ -1181,12 +1248,12 @@ function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="relative mt-4 border-t border-[#14181B]/10 bg-[#14181B] text-white">
+    <footer className="relative mt-4 border-t border-white/10 bg-[#14181B] text-white">
       <div className="relative mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
           <div className="col-span-2 sm:col-span-1">
             <p className="text-lg font-semibold text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-              Crosbytech
+              TestPilot
             </p>
             <p className="mt-2 max-w-[220px] text-xs leading-relaxed text-white/55">
               Automated website testing across SEO, accessibility, performance, and security.
@@ -1229,13 +1296,13 @@ function Footer() {
               Contact
             </p>
             <ul className="mt-3 space-y-2 text-xs text-white/60">
-              <li><a href="mailto:support@crosbytech.com" className="transition-colors duration-200 hover:text-white">support@crosbytech.com</a></li>             
+              <li><a href="mailto:support@TestPilot.com" className="transition-colors duration-200 hover:text-white">support@TestPilot.com</a></li>             
             </ul>
           </div>
         </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-white/40 sm:flex-row">
-          <p style={{ fontFamily: "'IBM Plex Mono', monospace" }}>© {year} Crosbytech. All rights reserved.</p>
+          <p style={{ fontFamily: "'IBM Plex Mono', monospace" }}>© {year} TestPilot. All rights reserved.</p>
           <p className="flex items-center gap-1">
             Made with <span className="text-[#E4572E]">♥</span> in India
           </p>
@@ -1248,20 +1315,24 @@ function Footer() {
 /* ------------------------------------------------------------------ */
 /* Design plan, for reference                                          */
 /*                                                                      */
-/* Subject: an automated website-audit tool. The old draft borrowed a   */
-/* generic "premium spa" cream+gold palette that had nothing to do with */
-/* testing software. This pass leans into the actual world of an audit: */
-/* inspection reports, checklists, tickets, ink stamps, live logs.      */
+/* Subject: an automated website-audit tool. This pass adds a dark      */
+/* theme without touching the report's core identity:                  */
 /*                                                                      */
-/* Color   ink #14181B · paper #F1ECDF · card #FFFFFF ·                 */
-/*         flag #E4572E (issues/CTA) · pass #1F5C45 (checks) ·          */
-/*         hairline rgba(20,24,27,.12)                                  */
-/* Type    Space Grotesk (headlines, technical/confident) +             */
-/*         IBM Plex Mono (scores, labels, log lines — reads like data)  */
-/* Layout  ledger rows and dashed/perforated dividers instead of        */
-/*         floating shadow cards; hairline borders throughout           */
-/* Signature  a scan-line beam sweeps once down the hero on load, next  */
-/*         to a live-updating mono "scan.log" readout, and a rotated    */
-/*         ink stamp in the corner marks the account's plan tier —      */
-/*         the page reads as a report being generated in front of you  */
+/* Theming   colors that should flip (page bg, cards, hairlines, body   */
+/*   text) now read as CSS variables (--ink/--paper/--card/--track) set */
+/*   on the .tp-root wrapper and overridden under .tp-root.dark. Accent  */
+/*   colors (flag #E4572E, pass #1F5C45) stay fixed in both themes —     */
+/*   they're identity, not surface. The mock "printed" report inside     */
+/*   ReportPreviewCard and the always-dark Footer / closing CTA panel    */
+/*   are deliberately left unthemed — a printed page and an ink panel    */
+/*   read the same whichever theme you're in.                            */
+/* Toggle    a fixed sun/moon button (top-right) flips a `dark` class,   */
+/*   persisted to localStorage("tp-theme") and seeded from the OS        */
+/*   color-scheme on first load.                                         */
+/* Motion    added: floating background orbs, a button-hover glow +      */
+/*   arrow-slide on both primary CTAs, a breathing loop on the plan       */
+/*   stamp after it settles, a hover spin+scale on process-step numbers,  */
+/*   a spin-in transition on the theme icon itself, and transition-colors */
+/*   on every surface that now changes color so the theme switch itself   */
+/*   animates instead of snapping.                                        */
 /* ------------------------------------------------------------------ */

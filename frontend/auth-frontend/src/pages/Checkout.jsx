@@ -128,7 +128,7 @@ function IdleCheckout({ plan, user, onPay }) {
         {/* Right: live card preview */}
         <div className="flex flex-col items-center justify-center rounded-3xl bg-white p-6 shadow-sm sm:p-8">
           <h2 className="mb-6 self-start text-sm font-semibold uppercase tracking-wide text-[#0b3327]/50">
-            Your Crosbytech Pass
+            Your TestPilot Pass
           </h2>
           <PaymentCard user={user} plan={plan} />
           <ul className="mt-8 w-full space-y-3 text-xs text-[#0b3327]/60">
@@ -206,7 +206,7 @@ function PaymentCard({ user, plan, glowing = false }) {
           <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Plan</p>
           <p className="text-sm font-medium">{plan.name}</p>
         </div>
-        <p className="font-serif text-lg italic text-[#d4af37]">Crosbytech</p>
+        <p className="font-serif text-lg italic text-[#d4af37]">TestPilot</p>
       </div>
     </div>
   );

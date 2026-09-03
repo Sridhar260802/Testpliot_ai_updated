@@ -178,5 +178,5 @@ def download_mobile_report(
     return FileResponse(
         test.report_path,
         media_type="application/pdf",
-        filename=f"CrosbyTech_Mobile_{(test.plan or 'app').capitalize()}_Report_{test.id}.pdf",
+        filename=f"TestPilot_Mobile_{(test.plan or 'app').capitalize()}_Report_{test.id}.pdf",
     )

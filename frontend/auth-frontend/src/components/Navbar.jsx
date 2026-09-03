@@ -2,7 +2,7 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { logout, getStoredUser } from "../services/authService";
 
-const BRAND_NAME = "Crosbytech";
+const BRAND_NAME = "TestPilot";
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -17,7 +17,6 @@ export default function Navbar() {
   const links = [
     { to: "/dashboard", label: "Home" },
     { to: "/test", label: "Website Test" },
-    { to: "/mobile-test", label: "Mobile App Test" },
     { to: "/history", label: "History" },
     { to: "/pricing", label: "Pricing" },
     { to: "/contact", label: "Contact Us" },

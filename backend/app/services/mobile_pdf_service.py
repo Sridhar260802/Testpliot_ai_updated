@@ -1,7 +1,7 @@
 """
 Mobile App Security PDF report generator.
 
-Uses the SAME shared Crosbytech report template as the website reports
+Uses the SAME shared TestPilot report template as the website reports
 (app/services/report_template.py, plan_pdf_service.py) - logo, olive
 brand colors, the same header block and section-heading style, the same
 grid/zebra-stripe table language - instead of its own one-off dark-grey

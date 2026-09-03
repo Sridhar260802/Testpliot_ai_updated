@@ -1,9 +1,9 @@
 """
-Shared Crosbytech report template.
+Shared TestPilot report template.
 
 Everything here exists so the Basic / Standard / Premium PDF reports
 (plan_pdf_service.py) all come out of the SAME visual template as
-Crosbytech_Report_Template_With_Logo.pdf - logo + olive brand colors,
+TestPilot_Report_Template_With_Logo.pdf - logo + olive brand colors,
 same header block, same "Summary Scores" and "Functional Testing
 Summary" table layouts - instead of each plan drawing its own
 one-off header.
@@ -21,7 +21,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_LEFT
 
 # ===============================
-# Brand palette (sampled from Crosbytech_Report_Template_With_Logo.pdf)
+# Brand palette (sampled from TestPilot_Report_Template_With_Logo.pdf)
 # ===============================
 
 OLIVE_DARK = colors.HexColor("#495B16")     # big title / heading text
@@ -33,11 +33,11 @@ BORDER_GREY = colors.HexColor("#D0D5C8")
 
 CONTENT_WIDTH = 450  # points - matches the width already used across plan_pdf_service tables
 
-# Logo lives at app/assets/crosbytech_logo.png
+# Logo lives at app/assets/TestPilot_logo.png
 LOGO_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "assets",
-    "crosbytech_logo.png",
+    "TestPilot_logo.png",
 )
 
 
@@ -61,7 +61,7 @@ def get_logo_flowable(max_width=1.7 * inch):
 
 def report_title_style():
     return ParagraphStyle(
-        "CrosbytechReportTitle",
+        "TestPilotReportTitle",
         fontName="Helvetica-Bold",
         fontSize=20,
         leading=24,
@@ -72,7 +72,7 @@ def report_title_style():
 
 def report_subtitle_style():
     return ParagraphStyle(
-        "CrosbytechReportSubtitle",
+        "TestPilotReportSubtitle",
         fontName="Helvetica",
         fontSize=10.5,
         leading=14,
@@ -83,7 +83,7 @@ def report_subtitle_style():
 
 def section_heading_style():
     return ParagraphStyle(
-        "CrosbytechSectionHeading",
+        "TestPilotSectionHeading",
         fontName="Helvetica-Bold",
         fontSize=13,
         leading=16,
@@ -106,7 +106,7 @@ def build_report_header(subtitle_text, url, generated_str, plan_level,
         Website URL      | <url>
         Generated Date   | <date>   Plan Level | <plan>
 
-    Matches Crosbytech_Report_Template_With_Logo.pdf section 0/1.
+    Matches TestPilot_Report_Template_With_Logo.pdf section 0/1.
     Returns a list of flowables ready to extend() onto the story.
 
     `title_text` / `id_label` default to the website-report wording so
@@ -648,7 +648,7 @@ def format_ai_recommendations(text, normal_style):
 
 # ===============================
 # Generic helpers for non-website reports (e.g. mobile app scans) that
-# still want to look like a Crosbytech report - same olive brand, same
+# still want to look like a TestPilot report - same olive brand, same
 # grid/zebra-stripe language as the tables above - without forcing them
 # through the website-specific summary_scores_table (which derives its
 # "Status" purely from a score band, e.g. 80+ = "Good"). A mobile scan's
@@ -776,6 +776,60 @@ def findings_table(issues):
         ])
 
     t = Table(data, colWidths=[55, 140, CONTENT_WIDTH - 195], repeatRows=1)
+    t.setStyle(TableStyle(style_cmds))
+    return t
+
+
+def failing_items_table(module_name, items):
+    """
+    Renders a module's failing items (broken link URLs, unlabeled
+    buttons, hidden images, etc.) as a proper bordered/zebra-striped
+    table instead of "&nbsp;&nbsp;-item" bullet paragraphs.
+
+    Two problems this fixes vs. the old bullet-paragraph rendering:
+      1. Alignment: a long URL that wraps to a second line used to fall
+         back to the page's left margin instead of lining up under the
+         first line. Paragraph's bulletText + leftIndent/bulletIndent
+         gives every wrapped line a proper hanging indent.
+      2. Completeness: `items` is expected to be the FULL de-duplicated
+         list for the module (see _extract_failure_details) - every
+         failing item is printed, no "...and N more." truncation.
+    """
+
+    header_style = ParagraphStyle(
+        "FailItemsHeader", fontName="Helvetica-Bold", fontSize=9.5,
+        textColor=colors.white, leading=12,
+    )
+    cell_style = ParagraphStyle(
+        "FailItemCell", fontName="Helvetica", fontSize=8.7, leading=12,
+        leftIndent=16, bulletIndent=2,
+    )
+
+    count_label = f"{len(items)} item{'s' if len(items) != 1 else ''}"
+    data = [[
+        Paragraph(
+            f"{module_name} &mdash; Failing Items ({count_label})",
+            header_style,
+        )
+    ]]
+
+    style_cmds = [
+        ("SPAN", (0, 0), (-1, 0)),
+        ("BACKGROUND", (0, 0), (-1, 0), OLIVE_ACCENT),
+        ("GRID", (0, 0), (-1, -1), 0.4, BORDER_GREY),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+    ]
+
+    for item in items:
+        data.append([Paragraph(item, cell_style, bulletText="\u2022")])
+
+    style_cmds.append(("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, ROW_ALT_BG]))
+
+    t = Table(data, colWidths=[CONTENT_WIDTH])
     t.setStyle(TableStyle(style_cmds))
     return t
 

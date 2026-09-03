@@ -1,5 +1,4 @@
 // src/pages/Pricing.jsx
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { getStoredUser } from "../services/authService";
@@ -49,60 +48,11 @@ const WEB_PLANS = [
   },
 ];
 
-const APK_PLANS = [
-  {
-    id: "basic",
-    name: "Basic",
-    price: 499,
-    tagline: "Quick Android security check.",
-    features: [
-      "Android (.apk) security scan",
-      "Debuggable-build detection",
-      "Backup exposure check",
-      "Sensitive permissions report",
-      "Basic PDF report",
-    ],
-  },
-  {
-    id: "standard",
-    name: "Standard",
-    price: 999,
-    tagline: "Android & iOS app testing.",
-    features: [
-      "Android (.apk) & iOS (.ipa) support",
-      "Exported components audit",
-      "Transport-security (ATS) checks",
-      "Permission usage descriptions",
-      "Detailed PDF report",
-    ],
-    highlighted: true,
-  },
-  {
-    id: "premium",
-    name: "Premium",
-    price: 1999,
-    tagline: "The complete mobile app audit.",
-    features: [
-      "Everything in Standard",
-      "Hardcoded-secret scanning",
-      "Weak-cryptography detection",
-      "Certificate & provisioning inspection",
-      "Combined full audit PDF report",
-    ],
-  },
-];
-
-const TABS = [
-  { id: "web", label: "Website Testing" },
-  { id: "apk", label: "APK Testing" },
-];
-
 export default function Pricing() {
   const navigate = useNavigate();
   const user = getStoredUser();
   const currentPlan = user?.plan || null;
-  const [tab, setTab] = useState("web");
-  const plans = tab === "web" ? WEB_PLANS : APK_PLANS;
+  const plans = WEB_PLANS;
 
   return (
     <div className="min-h-screen bg-[#F7F1E1]">
@@ -117,41 +67,14 @@ export default function Pricing() {
           </p>
         </div>
 
-        {/* ------------------------------------------------------------ */}
-        {/* Website Testing / APK Testing toggle                         */}
-        {/* ------------------------------------------------------------ */}
-        <div className="mt-8 flex justify-center animate-[fadeIn_0.5s_ease-out_0.1s_both]">
-          <div className="relative inline-flex rounded-full border border-[#0b3327]/12 bg-white p-1 shadow-sm">
-            <span
-              className="absolute inset-y-1 w-[calc(50%-4px)] rounded-full bg-[#0b3327] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-              style={{ transform: tab === "web" ? "translateX(0%)" : "translateX(calc(100% + 8px))" }}
-              aria-hidden="true"
-            />
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                aria-pressed={tab === t.id}
-                className={`relative z-10 rounded-full px-6 py-2.5 text-sm font-semibold transition-colors duration-300 ${
-                  tab === t.id ? "text-white" : "text-[#0b3327]/60 hover:text-[#0b3327]"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
         <p className="mt-3 text-center text-xs text-[#0b3327]/45 animate-[fadeIn_0.5s_ease-out_0.15s_both]">
-          {tab === "web"
-            ? "Automated audits for your website — SEO, accessibility, performance & security."
-            : "Static security analysis for your Android (.apk) or iOS (.ipa) build."}
+          Automated audits for your website — SEO, accessibility, performance & security.
         </p>
 
         {/* ------------------------------------------------------------ */}
-        {/* Plan cards — remount on tab change so the transition replays  */}
+        {/* Plan cards                                                    */}
         {/* ------------------------------------------------------------ */}
-        <div key={tab} className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-3 animate-[fadeIn_0.35s_ease-out_both]">
+        <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-3 animate-[fadeIn_0.35s_ease-out_both]">
           {plans.map((plan, idx) => (
             <div
               key={plan.id}
@@ -175,7 +98,7 @@ export default function Pricing() {
                     plan.highlighted ? "bg-white/15 text-white/70" : "bg-[#0b3327]/8 text-[#0b3327]/50"
                   }`}
                 >
-                  {tab === "web" ? "Web" : "APK / IPA"}
+                  Web
                 </span>
               </div>
               <p className={`mt-1 text-xs ${plan.highlighted ? "text-white/60" : "text-[#0b3327]/50"}`}>{plan.tagline}</p>
@@ -240,7 +163,7 @@ export default function Pricing() {
         </div>
 
         <p className="mt-6 text-center text-xs text-[#0b3327]/40 animate-[fadeIn_0.5s_ease-out_0.3s_both]">
-          One plan unlocks both — buy any tier once and it covers website audits and mobile app scans alike.
+          Every tier covers unlimited website audits at that plan's depth.
         </p>
       </div>
 

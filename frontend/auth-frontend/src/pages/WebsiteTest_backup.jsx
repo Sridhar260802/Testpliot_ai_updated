@@ -301,7 +301,7 @@ export default function WebsiteTest() {
                 <div className="mt-5 inline-block animate-[fadeIn_0.35s_ease-out_0.38s_both]">
                   <a
                     href={reportBlobUrl}
-                    download={`Crosbytech_${plan}_report.pdf`}
+                    download={`TestPilot_${plan}_report.pdf`}
                     onClick={handleDownloadClick}
                     aria-disabled={downloadPhase !== "idle"}
                     className={`relative inline-flex items-center gap-2 overflow-hidden rounded-sm px-6 py-3 text-sm font-semibold text-white transition-all duration-200 ${

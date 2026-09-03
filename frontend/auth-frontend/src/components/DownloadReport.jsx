@@ -19,7 +19,7 @@ export default function DownloadReport() {
       // Temporary link create panni click panna veikirom
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', 'Crosbytech_Website_Report.pdf'); 
+      link.setAttribute('download', 'TestPilot_Website_Report.pdf'); 
       document.body.appendChild(link);
       link.click();
       

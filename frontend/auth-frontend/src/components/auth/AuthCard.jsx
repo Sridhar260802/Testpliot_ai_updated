@@ -15,7 +15,7 @@ import { login, signup, AuthError } from "../../services/authService";
 import { validateEmail, validatePassword, validateConfirmPassword } from "../../utils/validation";
 import GoogleSignInButton from "./GoogleSignInButton";
 
-const BRAND_NAME = "Crosbytech";
+const BRAND_NAME = "TestPilot";
 
 export default function AuthCard({ initialMode = "signin" }) {
   const [mode, setMode] = useState(initialMode);

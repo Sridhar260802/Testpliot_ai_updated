@@ -20,6 +20,8 @@ from reportlab.lib.units import mm
 from pathlib import Path
 
 import requests
+import re
+from collections import Counter
 
 # =====================================
 # Global Timeout Settings
@@ -500,15 +502,30 @@ def navbar_test(page):
 
                 link = nav_links.nth(i)
 
+                href = link.get_attribute("href")
+
+                try:
+                    link_text = link.inner_text(
+                        timeout=2000
+                    ).strip()
+                except Exception:
+                    link_text = ""
+
+                if not link_text:
+                    link_text = (
+                        link.get_attribute("aria-label")
+                        or link.get_attribute("title")
+                        or "(no text)"
+                    )
+
                 if not link.is_visible():
 
                     failed_links.append(
-                        f"Hidden Link {i+1}"
+                        f"Hidden Link {i+1}: \"{link_text}\" "
+                        f"-> {href or '(no href)'}"
                     )
 
                     continue
-
-                href = link.get_attribute("href")
 
                 if href is None:
                     continue
@@ -527,7 +544,8 @@ def navbar_test(page):
                 if response.status >= 400:
 
                     failed_links.append(
-                        f"{href} ({response.status})"
+                        f"\"{link_text}\" -> {href} "
+                        f"({response.status})"
                     )
 
             except Exception as e:
@@ -5496,6 +5514,103 @@ def seo_test(page, url):
             )
 
         # ------------------------------------------------
+        # 14.10b KEYWORDS
+        # ------------------------------------------------
+
+        print("\n[14.10b] Checking keywords...")
+
+        meta_keywords_tag = soup.find(
+            "meta",
+            attrs={"name": "keywords"}
+        )
+
+        meta_keywords = []
+
+        if meta_keywords_tag:
+
+            raw_keywords = meta_keywords_tag.get(
+                "content", ""
+            )
+
+            meta_keywords = [
+                k.strip()
+                for k in raw_keywords.split(",")
+                if k.strip()
+            ]
+
+        text_soup = BeautifulSoup(
+            html,
+            "html.parser"
+        )
+
+        for tag in text_soup(["script", "style", "noscript"]):
+            tag.decompose()
+
+        body_text = text_soup.get_text(
+            " ", strip=True
+        ).lower()
+
+        SEO_STOP_WORDS = {
+            "the", "and", "for", "are", "but", "not", "you", "your",
+            "with", "this", "that", "from", "have", "has", "our",
+            "will", "can", "all", "was", "were", "who", "what",
+            "when", "where", "why", "how", "into", "more", "than",
+            "then", "them", "they", "their", "there", "here", "its",
+            "about", "also", "get", "one", "use", "using", "each",
+            "https", "http", "www", "com"
+        }
+
+        words = re.findall(r"[a-zA-Z]{4,}", body_text)
+
+        filtered_words = [
+            w for w in words
+            if w not in SEO_STOP_WORDS
+        ]
+
+        keyword_counts = Counter(filtered_words)
+
+        top_keywords = [
+            {"keyword": kw, "count": count}
+            for kw, count in keyword_counts.most_common(10)
+        ]
+
+        print(
+            f"Top Keywords : "
+            f"{[k['keyword'] for k in top_keywords]}"
+        )
+
+        title_lower = title.lower()
+        description_lower = description.lower()
+        h1_lower = " ".join(h1_text).lower()
+
+        keyword_usage = [
+            {
+                "keyword": item["keyword"],
+                "count": item["count"],
+                "in_title": item["keyword"] in title_lower,
+                "in_meta_description":
+                    item["keyword"] in description_lower,
+                "in_h1": item["keyword"] in h1_lower
+            }
+            for item in top_keywords[:5]
+        ]
+
+        if top_keywords and not any(
+            k["in_title"] or k["in_h1"]
+            for k in keyword_usage
+        ):
+
+            issues.append(
+                "Top content keywords are not used in "
+                "the title or H1 heading."
+            )
+
+            recommendations.append(
+                "Include your primary keyword in the "
+                "title and H1 heading."
+            )
+
+        # ------------------------------------------------
         # 14.11 FAVICON
         # ------------------------------------------------
 
@@ -6010,6 +6125,15 @@ def seo_test(page, url):
 
             "h1_text":
                 h1_text,
+
+            "meta_keywords":
+                meta_keywords,
+
+            "top_keywords":
+                top_keywords,
+
+            "keyword_usage":
+                keyword_usage,
 
             "image_seo": {
 
@@ -6811,24 +6935,20 @@ def broken_resources_test(page):
     
 
 # ----------------------------------------------------
-# MODULE 19 : DOWNLOAD / UPLOAD TESTING
+# MODULE 19 : ERROR PAGE (404) HANDLING TESTING
 # ----------------------------------------------------
 
-def download_upload_test(page):
+def error_page_test(page):
 
-    print("========== DOWNLOAD / UPLOAD TEST START ==========\n")
+    print("========== ERROR PAGE (404) HANDLING TEST START ==========\n")
 
     issues = []
+    recommendations = []
     screenshots = []
 
-    download_passed = 0
-    download_failed = 0
-
-    upload_passed = 0
-    upload_failed = 0
-
-    download_elements = []
-    upload_elements = []
+    tested_features = 0
+    passed_features = 0
+    failed_features = 0
 
     # ------------------------------------------------
     # 19.1 PAGE CHECK
@@ -6838,596 +6958,303 @@ def download_upload_test(page):
 
     try:
 
-        print(f"Current URL : {page.url}")
+        base_url = page.url
+
+        print(f"Current URL : {base_url}")
         print("Page available")
 
     except Exception as e:
 
-        print("Page check failed")
+        print("❌ Page check failed")
         print(f"Error : {e}")
 
         return {
-            "module": "Download / Upload Testing",
+
+            "module": "Error Page (404) Handling",
+
             "status": "FAIL",
-            "download_count": 0,
-            "download_passed": 0,
-            "download_failed": 1,
-            "upload_count": 0,
-            "upload_passed": 0,
-            "upload_failed": 0,
-            "tested_features": 1,
-            "passed_features": 0,
-            "failed_features": 1,
-            "module_score": 0,
-            "issues": [str(e)],
-            "recommendations": [
-                "Verify website availability."
-            ],
-            "screenshots": [],
+
             "issue": str(e),
-            "possible_reason": "Page could not be accessed.",
-            "developer_action": "Review Playwright logs."
+
+            "issues": [str(e)],
+
+            "possible_reason": "Could not read the current page URL.",
+
+            "recommendations": [
+                "Retry the test once the page has finished loading."
+            ],
+
+            "developer_action": "Check Playwright execution logs for this module.",
+
+            "module_score": 0,
+
+            "screenshots": []
+
         }
 
     # ------------------------------------------------
-    # 19.2 SEARCH DOWNLOAD LINKS
+    # 19.2 BUILD A NON-EXISTENT URL
     # ------------------------------------------------
 
     print(
-        "\n[19.2] Searching all links for download functionality..."
+        "\n[19.2] Building a non-existent page URL..."
     )
+
+    random_slug = (
+        "qa-check-page-not-found-"
+        + str(int(time.time()))
+    )
+
+    broken_url = urljoin(
+        base_url,
+        "/" + random_slug
+    )
+
+    print(
+        f"Testing URL : {broken_url}"
+    )
+
+    # ------------------------------------------------
+    # 19.3 NAVIGATE TO THE NON-EXISTENT PAGE
+    # ------------------------------------------------
+
+    print(
+        "\n[19.3] Navigating to the non-existent page..."
+    )
+
+    status_code = None
+    navigation_error = None
 
     try:
 
-        links = page.locator("a")
-
-        total_links = links.count()
-
-        print(
-            f"Total links found : {total_links}"
+        response = page.goto(
+            broken_url,
+            wait_until="domcontentloaded",
+            timeout=DEFAULT_NAV_TIMEOUT
         )
 
-        download_extensions = [
-            ".pdf",
-            ".csv",
-            ".xlsx",
-            ".xls",
-            ".doc",
-            ".docx",
-            ".zip",
-            ".txt",
-            ".json",
-            ".xml",
-            ".ppt",
-            ".pptx"
-        ]
+        if response is not None:
+            status_code = response.status
 
-        download_keywords = [
-            "download",
-            "export"
-        ]
+        safe_network_idle(page)
 
-        for i in range(total_links):
-
-            try:
-
-                link = links.nth(i)
-
-                if not link.is_visible():
-                    continue
-
-                href = link.get_attribute("href")
-
-                text = link.inner_text(
-                    timeout=3000
-                ).strip()
-
-                download_attribute = link.get_attribute(
-                    "download"
-                )
-
-                href_lower = (
-                    href.lower()
-                    if href
-                    else ""
-                )
-
-                aria_label = (
-                    link.get_attribute("aria-label")
-                    or ""
-                ).lower()
-
-                title_attr = (
-                    link.get_attribute("title")
-                    or ""
-                ).lower()
-
-                text_lower = text.lower()
-
-                combined_text = (
-                    f"{text_lower} "
-                    f"{aria_label} "
-                    f"{title_attr}"
-                )
-
-                is_download = False
-
-                if download_attribute is not None:
-                    is_download = True
-
-                if any(
-                    extension in href_lower
-                    for extension in download_extensions
-                ):
-                    is_download = True
-
-                if any(
-                    keyword in combined_text
-                    for keyword in download_keywords
-                ):
-                    is_download = True
-
-                if is_download:
-
-                    text = text or aria_label or title_attr
-
-                    download_elements.append({
-                        "type": "link",
-                        "index": i,
-                        "text": text or f"Download Link {i + 1}",
-                        "href": href
-                    })
-
-                    print("--------------------------------")
-                    print(
-                        f"Download found : "
-                        f"{text or 'Unnamed Link'}"
-                    )
-                    print(
-                        f"Href : {href}"
-                    )
-
-            except Exception as e:
-
-                print(
-                    f"Download link {i + 1} skipped : {e}"
-                )
+        print(
+            f"HTTP Status Code : {status_code}"
+        )
 
     except Exception as e:
 
-        print("Download link scan failed")
+        navigation_error = str(e)
+
+        print("❌ Navigation to non-existent page failed")
         print(f"Error : {e}")
+
+    # ------------------------------------------------
+    # 19.4 CHECK HTTP STATUS CODE
+    # ------------------------------------------------
+
+    print(
+        "\n[19.4] Checking HTTP status code..."
+    )
+
+    tested_features += 1
+
+    if navigation_error:
+
+        failed_features += 1
 
         issues.append(
-            f"Download scan failed: {str(e)}"
+            f"Could not load a non-existent URL to test "
+            f"error handling ({navigation_error})."
+        )
+
+    elif status_code in (404, 410):
+
+        passed_features += 1
+
+        print(
+            f"Server correctly returned status {status_code} "
+            f"for a missing page."
+        )
+
+    elif status_code == 200:
+
+        failed_features += 1
+
+        issues.append(
+            "The server returns HTTP 200 for a non-existent page "
+            "instead of 404 (a 'soft 404')."
+        )
+
+    else:
+
+        failed_features += 1
+
+        issues.append(
+            f"Unexpected status code {status_code} returned "
+            f"for a non-existent page."
         )
 
     # ------------------------------------------------
-    # 19.3 SEARCH DOWNLOAD BUTTONS
+    # 19.5 CHECK FOR A CUSTOM (BRANDED) ERROR PAGE
     # ------------------------------------------------
 
     print(
-        "\n[19.3] Searching buttons for download/export..."
+        "\n[19.5] Checking for a custom error page..."
     )
+
+    tested_features += 1
+
+    generic_browser_error_markers = [
+        "this site can’t be reached",
+        "this site can't be reached",
+        "err_",
+        "http error 404",
+        "404 not found",
+        "nginx",
+        "apache tomcat",
+    ]
+
+    page_text = ""
+    has_custom_error_page = False
 
     try:
 
-        buttons = page.locator(
-            "button:visible, "
-            "input[type='button']:visible, "
-            "input[type='submit']:visible"
+        page_text = page.inner_text("body").lower()
+
+        looks_like_generic_error = any(
+            marker in page_text
+            for marker in generic_browser_error_markers
+            if marker in ("err_", "nginx", "apache tomcat")
         )
 
-        total_buttons = buttons.count()
-
-        print(
-            f"Total visible buttons found : {total_buttons}"
+        has_helpful_wording = any(
+            keyword in page_text
+            for keyword in [
+                "page not found",
+                "we can't find",
+                "we can’t find",
+                "page you are looking for",
+                "doesn't exist",
+                "does not exist",
+                "not found",
+                "404",
+            ]
         )
 
-        download_button_keywords = [
-            "download",
-            "export"
-        ]
-
-        for i in range(total_buttons):
-
-            try:
-
-                button = buttons.nth(i)
-
-                text = button.inner_text(
-                    timeout=3000
-                ).strip()
-
-                aria_label = (
-                    button.get_attribute("aria-label")
-                    or ""
-                ).lower()
-
-                title_attr = (
-                    button.get_attribute("title")
-                    or ""
-                ).lower()
-
-                class_attr = (
-                    button.get_attribute("class")
-                    or ""
-                ).lower()
-
-                text_lower = text.lower()
-
-                combined = (
-                    f"{text_lower} "
-                    f"{aria_label} "
-                    f"{title_attr} "
-                    f"{class_attr}"
-                )
-
-                if any(
-                    keyword in combined
-                    for keyword in download_button_keywords
-                ):
-
-                    label = (
-                        text
-                        or aria_label
-                        or title_attr
-                        or f"Download Button {i + 1}"
-                    )
-
-                    download_elements.append({
-                        "type": "button",
-                        "index": i,
-                        "text": label,
-                        "href": None
-                    })
-
-                    print(
-                        f"Download button found : "
-                        f"{label}"
-                    )
-
-            except Exception as e:
-
-                print(
-                    f"Download button {i + 1} skipped : {e}"
-                )
-
-    except Exception as e:
-
-        print("Download button scan failed")
-        print(f"Error : {e}")
-
-    # ------------------------------------------------
-    # 19.4 TEST DOWNLOADS
-    # ------------------------------------------------
-
-    print(
-        "\n[19.4] Testing detected download elements..."
-    )
-
-    print(
-        f"Download elements detected : "
-        f"{len(download_elements)}"
-    )
-
-    for item in download_elements:
-
-        print("--------------------------------")
-
-        print(
-            f"Testing download : "
-            f"{item['text']}"
+        has_custom_error_page = (
+            has_helpful_wording
+            and not looks_like_generic_error
+            and not navigation_error
         )
 
-        try:
+        if has_custom_error_page:
 
-            if item["type"] == "link":
+            passed_features += 1
 
-                locator = page.locator("a").nth(
-                    item["index"]
-                )
+            print("Custom / branded error page detected.")
 
-            else:
+        else:
 
-                locator = buttons.nth(
-                    item["index"]
-                )
-
-            before_url = page.url
-
-            pages_before = len(page.context.pages)
-
-            try:
-
-                with page.expect_download(
-                    timeout=8000
-                ) as download_info:
-
-                    locator.click(
-                        timeout=10000
-                    )
-
-                download = download_info.value
-
-                print(
-                    f"Downloaded file : "
-                    f"{download.suggested_filename}"
-                )
-
-                print("Download PASS")
-
-                download_passed += 1
-
-            except TimeoutError:
-
-                # No native browser download event fired.
-                # This is still a valid outcome when the file
-                # opened in a new tab, or the page navigated
-                # directly to a file URL (inline viewer) -
-                # both are normal download behaviours.
-
-                opened_new_tab = (
-                    len(page.context.pages) > pages_before
-                )
-
-                navigated_to_file = (
-                    page.url != before_url
-                    and any(
-                        page.url.lower().endswith(ext)
-                        for ext in download_extensions
-                    )
-                )
-
-                if opened_new_tab or navigated_to_file:
-
-                    print(
-                        "Download PASS "
-                        "(opened in new tab / inline viewer)"
-                    )
-
-                    download_passed += 1
-
-                    if opened_new_tab:
-
-                        for extra_page in page.context.pages[pages_before:]:
-
-                            try:
-                                extra_page.close()
-                            except Exception:
-                                pass
-
-                    if page.url != before_url:
-
-                        try:
-                            page.goto(
-                                before_url,
-                                wait_until="domcontentloaded",
-                                timeout=60000
-                            )
-                        except Exception:
-                            pass
-
-                else:
-
-                    raise
-
-        except Exception as e:
-
-            print("Download FAIL")
-            print(f"Error : {e}")
-
-            download_failed += 1
+            failed_features += 1
 
             issues.append(
-                f"Download failed: {item['text']}"
+                "No clear custom error page content was detected "
+                "for the missing page."
             )
-
-    # ------------------------------------------------
-    # 19.5 SEARCH UPLOAD INPUTS
-    # ------------------------------------------------
-
-    print(
-        "\n[19.5] Searching upload functionality..."
-    )
-
-    try:
-
-        file_inputs = page.locator(
-            "input[type='file']"
-        )
-
-        total_file_inputs = file_inputs.count()
-
-        print(
-            f"File input fields found : "
-            f"{total_file_inputs}"
-        )
-
-        for i in range(total_file_inputs):
-
-            try:
-
-                field = file_inputs.nth(i)
-
-                upload_elements.append({
-                    "type": "file_input",
-                    "index": i
-                })
-
-                print(
-                    f"Upload field detected : "
-                    f"{i + 1}"
-                )
-
-            except Exception as e:
-
-                print(
-                    f"Upload field {i + 1} skipped : {e}"
-                )
 
     except Exception as e:
 
-        print("Upload field scan failed")
-        print(f"Error : {e}")
+        failed_features += 1
+
+        issues.append(
+            f"Could not inspect error page content ({e})."
+        )
 
     # ------------------------------------------------
-    # 19.6 SEARCH UPLOAD BUTTONS
+    # 19.6 CHECK FOR A WAY BACK TO THE SITE
     # ------------------------------------------------
 
     print(
-        "\n[19.6] Searching upload/import buttons..."
+        "\n[19.6] Checking for a link back to the site..."
     )
+
+    tested_features += 1
+
+    has_return_link = False
 
     try:
 
-        upload_buttons = page.locator(
-            "button:visible, "
-            "input[type='button']:visible, "
-            "input[type='submit']:visible"
-        )
-
-        total_upload_buttons = upload_buttons.count()
-
-        print(
-            f"Buttons checked for upload : "
-            f"{total_upload_buttons}"
-        )
-
-        upload_button_keywords = [
-            "upload",
-            "import",
-            "attach",
-            "choose file",
-            "select file"
+        return_link_keywords = [
+            "home",
+            "go back",
+            "back to",
+            "homepage",
+            "return",
         ]
 
-        for i in range(total_upload_buttons):
+        links = page.locator("a")
+        total_links = links.count()
+
+        for i in range(min(total_links, 50)):
 
             try:
 
-                button = upload_buttons.nth(i)
-
-                text = button.inner_text(
-                    timeout=3000
-                ).strip()
-
-                aria_label = (
-                    button.get_attribute("aria-label")
+                link_text = (
+                    links.nth(i).inner_text(timeout=2000)
                     or ""
-                ).lower()
+                ).strip().lower()
 
-                title_attr = (
-                    button.get_attribute("title")
-                    or ""
-                ).lower()
+            except Exception:
+                continue
 
-                class_attr = (
-                    button.get_attribute("class")
-                    or ""
-                ).lower()
+            if any(
+                keyword in link_text
+                for keyword in return_link_keywords
+            ):
+                has_return_link = True
+                break
 
-                text_lower = text.lower()
+        if has_return_link:
 
-                combined = (
-                    f"{text_lower} "
-                    f"{aria_label} "
-                    f"{title_attr} "
-                    f"{class_attr}"
-                )
+            passed_features += 1
 
-                if any(
-                    keyword in combined
-                    for keyword in upload_button_keywords
-                ):
+            print("Found a link that leads back to the site.")
 
-                    label = (
-                        text
-                        or aria_label
-                        or title_attr
-                        or f"Upload Button {i + 1}"
-                    )
+        else:
 
-                    upload_elements.append({
-                        "type": "upload_button",
-                        "index": i,
-                        "text": label
-                    })
+            failed_features += 1
 
-                    print(
-                        f"Upload button found : "
-                        f"{label}"
-                    )
-
-            except Exception as e:
-
-                print(
-                    f"Upload button {i + 1} skipped : {e}"
-                )
+            issues.append(
+                "The error page does not offer an obvious link "
+                "back to the homepage."
+            )
 
     except Exception as e:
 
-        print("Upload button scan failed")
-        print(f"Error : {e}")
+        failed_features += 1
+
+        issues.append(
+            f"Could not check for a return link ({e})."
+        )
 
     # ------------------------------------------------
-    # 19.7 VALIDATE UPLOAD FIELDS
+    # 19.7 RETURN TO THE ORIGINAL PAGE
     # ------------------------------------------------
 
     print(
-        "\n[19.7] Validating upload fields..."
+        "\n[19.7] Returning to the original page..."
     )
 
-    for item in upload_elements:
+    try:
 
-        if item["type"] != "file_input":
-            continue
+        safe_goto(page, base_url)
 
-        try:
+    except Exception as e:
 
-            field = page.locator(
-                "input[type='file']"
-            ).nth(
-                item["index"]
-            )
-
-            visible = field.is_visible()
-
-            enabled = field.is_enabled()
-
-            print(
-                f"Upload field "
-                f"{item['index'] + 1} "
-                f"| Visible : {visible} "
-                f"| Enabled : {enabled}"
-            )
-
-            if visible and enabled:
-
-                print("Upload field PASS")
-
-                upload_passed += 1
-
-            else:
-
-                print("Upload field FAIL")
-
-                upload_failed += 1
-
-                issues.append(
-                    f"Upload field {item['index'] + 1} is not usable."
-                )
-
-        except Exception as e:
-
-            print("Upload validation failed")
-            print(f"Error : {e}")
-
-            upload_failed += 1
-
-            issues.append(
-                f"Upload validation failed: {str(e)}"
-            )
+        print(
+            f"Could not return to the original page : {e}"
+        )
 
     # ------------------------------------------------
     # 19.8 SCREENSHOT
@@ -7438,7 +7265,7 @@ def download_upload_test(page):
     )
 
     screenshot = (
-        "screenshots/download_upload_test.png"
+        "screenshots/error_page_test.png"
     )
 
     try:
@@ -7474,181 +7301,70 @@ def download_upload_test(page):
         "\n[19.9] Calculating results..."
     )
 
-    download_count = len(
-        download_elements
-    )
-
-    upload_count = len(
-        upload_elements
-    )
-
-    passed_features = (
-        download_passed +
-        upload_passed
-    )
-
-    failed_features = (
-        download_failed +
-        upload_failed
-    )
-
-    tested_features = (
-        passed_features +
-        failed_features
-    )
-
-    print("--------------------------------")
-
-    print(
-        f"Download Count : "
-        f"{download_count}"
-    )
-
-    print(
-        f"Download Passed : "
-        f"{download_passed}"
-    )
-
-    print(
-        f"Download Failed : "
-        f"{download_failed}"
-    )
-
-    print("--------------------------------")
-
-    print(
-        f"Upload Count : "
-        f"{upload_count}"
-    )
-
-    print(
-        f"Upload Passed : "
-        f"{upload_passed}"
-    )
-
-    print(
-        f"Upload Failed : "
-        f"{upload_failed}"
-    )
-
-    print("--------------------------------")
-
-    print(
-        f"Tested Features : "
-        f"{tested_features}"
-    )
-
-    print(
-        f"Passed Features : "
-        f"{passed_features}"
-    )
-
-    print(
-        f"Failed Features : "
-        f"{failed_features}"
-    )
-
-    # ------------------------------------------------
-    # IMPORTANT:
-    # NO FEATURE = PASS
-    # ------------------------------------------------
-
-    if tested_features == 0:
-
-        status = "PASS"
-
-        module_score = 100
-
-        issues = []
-
-        recommendations = [
-            "No download or upload functionality was detected.",
-            "Module passed because there were no download/upload features available to fail."
-        ]
-
-        issue = ""
-
-        possible_reason = (
-            "The current webpage does not contain "
-            "download or upload functionality."
-        )
-
-        developer_action = (
-            "No action required unless the webpage "
-            "is expected to provide download/upload functionality."
-        )
-
-        print(
-            "No download/upload functionality detected."
-        )
-
-        print(
-            "Module treated as PASS because "
-            "there was no functionality to test."
-        )
-
-    # ------------------------------------------------
-    # FAIL
-    # ------------------------------------------------
-
-    elif failed_features > 0:
-
-        status = "FAIL"
+    if tested_features > 0:
 
         module_score = int(
-            (
-                passed_features /
-                tested_features
-            ) * 100
+            (passed_features / tested_features) * 100
         )
-
-        recommendations = [
-            "Fix failed download/upload functionality.",
-            "Verify download links and upload controls.",
-            "Check frontend event handlers."
-        ]
-
-        issue = (
-            f"{failed_features} "
-            "download/upload feature(s) failed."
-        )
-
-        possible_reason = (
-            "Detected download/upload functionality "
-            "did not work correctly."
-        )
-
-        developer_action = (
-            "Review failed download/upload elements "
-            "and their event handlers."
-        )
-
-    # ------------------------------------------------
-    # PASS
-    # ------------------------------------------------
 
     else:
 
+        module_score = 0
+
+    if module_score == 100:
+
         status = "PASS"
 
-        module_score = 100
-
         recommendations = [
-            "All detected download/upload "
-            "features passed successfully."
+            "Error page handling looks good : the site returns a "
+            "proper 404, shows helpful content, and links back home."
         ]
 
         issue = ""
-
         possible_reason = ""
-
         developer_action = ""
 
-    # ------------------------------------------------
-    # 19.10 FINAL OUTPUT
-    # ------------------------------------------------
+    else:
 
-    print("--------------------------------")
+        status = "FAIL"
+
+        recommendations = [
+            "Return an HTTP 404 status for missing pages.",
+            "Show a friendly, branded error page instead of a "
+            "generic server error.",
+            "Add a clear link back to the homepage on the error page."
+        ]
+
+        issue = (
+            f"{failed_features} of {tested_features} error-page "
+            f"check(s) failed."
+        )
+
+        possible_reason = (
+            "The website does not fully implement custom error "
+            "(404) page handling."
+        )
+
+        developer_action = (
+            "Review how the server and front-end handle unknown "
+            "URLs and improve the 404 experience."
+        )
+
+    print(
+        "--------------------------------"
+    )
+
+    print(
+        f"Tested   : {tested_features}"
+    )
+
+    print(
+        f"Passed   : {passed_features}"
+    )
+
+    print(
+        f"Failed   : {failed_features}"
+    )
 
     print(
         f"Module 19 Score : "
@@ -7663,7 +7379,7 @@ def download_upload_test(page):
     print("--------------------------------")
 
     print(
-        "========== DOWNLOAD / UPLOAD TEST END ==========\n"
+        "========== ERROR PAGE (404) HANDLING TEST END ==========\n"
     )
 
     # ------------------------------------------------
@@ -7672,21 +7388,15 @@ def download_upload_test(page):
 
     return {
 
-        "module": "Download / Upload Testing",
+        "module": "Error Page (404) Handling",
 
         "status": status,
 
-        "download_count": download_count,
+        "status_code": status_code,
 
-        "download_passed": download_passed,
+        "has_custom_error_page": has_custom_error_page,
 
-        "download_failed": download_failed,
-
-        "upload_count": upload_count,
-
-        "upload_passed": upload_passed,
-
-        "upload_failed": upload_failed,
+        "has_return_link": has_return_link,
 
         "tested_features": tested_features,
 
@@ -10324,10 +10034,10 @@ def functional_testing(url):
                 )
 
             # ====================================================
-            # MODULE 19 : DOWNLOAD / UPLOAD TESTING
+            # MODULE 19 : ERROR PAGE (404) HANDLING TESTING
             # ====================================================
 
-            print("\nRunning Module 19 : Download / Upload Testing")
+            print("\nRunning Module 19 : Error Page (404) Handling")
 
             try:
 
@@ -10335,17 +10045,17 @@ def functional_testing(url):
                 page.wait_for_timeout(3000)
 
                 results.append(
-                    download_upload_test(page)
+                    error_page_test(page)
                 )
 
             except Exception as e:
 
-                print("❌ Module 19 : Download / Upload Testing Error")
+                print("❌ Module 19 : Error Page (404) Handling Error")
                 print(f"Error : {e}")
 
                 results.append(
                     {
-                    "module": "Download / Upload Testing",
+                    "module": "Error Page (404) Handling",
                     "status": "FAIL",
                     "issue": str(e),
                     "issues": [str(e)],

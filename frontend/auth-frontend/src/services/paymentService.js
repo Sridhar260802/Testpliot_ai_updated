@@ -57,7 +57,7 @@ export async function openRazorpayCheckout({ amountInRupees, planName, userEmail
       key: RAZORPAY_KEY_ID,
       amount: Math.round(amountInRupees * 100), // paise
       currency: "INR",
-      name: "Crosbytech",
+      name: "TestPilot",
       description: `${planName} Plan Subscription`,
       prefill: { email: userEmail, name: userName },
       theme: { color: "#0b3327" },

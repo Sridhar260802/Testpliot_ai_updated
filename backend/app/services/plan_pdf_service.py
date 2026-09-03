@@ -25,6 +25,7 @@ from app.services.report_template import (
     module_status_table,
     stat_grid_table,
     param_value_table,
+    failing_items_table,
     footer_note,
     OLIVE_ACCENT,
     OLIVE_LIGHT_BG,
@@ -80,12 +81,16 @@ _DETAIL_LIST_KEYS = [
 ]
 
 
-def _extract_failure_details(result, limit=10):
+def _extract_failure_details(result):
     """
-    Pull the concrete failing items (e.g. which link/button/image) out of a
-    module result, instead of just the one-line summary in "issue". Each
+    Pull every concrete failing item (e.g. which link/button/image) out of
+    a module result, instead of just the one-line summary in "issue". Each
     test module names its detail list differently, so we check every field
     name that's actually used across the functional test modules.
+
+    Returns the full de-duplicated list - the PDF prints every failing
+    item for a module rather than a capped preview, so there is no
+    "...and N more." line hiding data the customer already paid to see.
     """
 
     items = []
@@ -139,7 +144,7 @@ def _extract_failure_details(result, limit=10):
             seen.add(item)
             unique_items.append(item)
 
-    return unique_items[:limit], len(unique_items)
+    return unique_items
 
 
 def _issues_block(title, issues, normal_style):
@@ -150,6 +155,74 @@ def _issues_block(title, issues, normal_style):
     else:
         for issue in issues:
             story.append(Paragraph(f"&bull; {_safe(issue)}", normal_style))
+
+    story.append(Spacer(1, 0.15 * inch))
+    return story
+
+
+def _recommendations_block(title, recommendations, normal_style):
+    """
+    Same layout as _issues_block, but for the 'recommendations' list each
+    basic-tier service already returns alongside 'issues'. Previously
+    collected by every basic_* check and then discarded before it ever
+    reached the PDF - this is the only change needed to surface it.
+    """
+    story = [Paragraph(f"<b>{_safe(title)}</b>", normal_style)]
+
+    if not recommendations:
+        story.append(Paragraph("No recommendations at this time.", normal_style))
+    else:
+        for rec in recommendations:
+            story.append(Paragraph(f"&bull; {_safe(rec)}", normal_style))
+
+    story.append(Spacer(1, 0.15 * inch))
+    return story
+
+
+def _keyword_block(title, top_keywords, keyword_usage, normal_style):
+    """
+    Renders the SEO keyword findings: which keywords the page's content
+    actually uses most, and whether each one shows up in the title,
+    meta description, and H1 (i.e. whether the on-page SEO is actually
+    targeting the content's own keywords).
+    """
+    story = [Paragraph(f"<b>{_safe(title)}</b>", normal_style)]
+
+    if not top_keywords:
+        story.append(Paragraph("No keyword data detected.", normal_style))
+        story.append(Spacer(1, 0.15 * inch))
+        return story
+
+    usage_by_keyword = {
+        item.get("keyword"): item
+        for item in (keyword_usage or [])
+    }
+
+    for item in top_keywords:
+        keyword = item.get("keyword", "")
+        count = item.get("count", 0)
+        usage = usage_by_keyword.get(keyword)
+
+        if usage:
+            flags = (
+                f"Title: {'Yes' if usage.get('in_title') else 'No'} | "
+                f"Meta Description: "
+                f"{'Yes' if usage.get('in_meta_description') else 'No'} | "
+                f"H1: {'Yes' if usage.get('in_h1') else 'No'}"
+            )
+            story.append(
+                Paragraph(
+                    f"&bull; <b>{_safe(keyword)}</b> ({count}x) &mdash; {flags}",
+                    normal_style,
+                )
+            )
+        else:
+            story.append(
+                Paragraph(
+                    f"&bull; <b>{_safe(keyword)}</b> ({count}x)",
+                    normal_style,
+                )
+            )
 
     story.append(Spacer(1, 0.15 * inch))
     return story
@@ -491,27 +564,119 @@ def generate_basic_pdf_report(data, filename="Basic_Website_Report.pdf"):
 
     story.append(section_heading("2. Basic SEO Findings"))
     story.append(Spacer(1, 0.1 * inch))
+    story.append(
+        param_value_table(
+            [
+                ("Page Title", seo.get("title") or "Missing"),
+                ("Meta Description", seo.get("meta_description") or "Missing"),
+                ("Meta Keywords", seo.get("meta_keywords") or "Missing"),
+                ("Canonical Tag", seo.get("canonical") or "Missing"),
+                ("Favicon", seo.get("favicon") or "Missing"),
+                ("Open Graph Title", seo.get("open_graph") or "Missing"),
+                ("H1 Tags Found", seo.get("h1_count", 0)),
+                ("H2 Tags Found", seo.get("h2_count", 0)),
+            ],
+            header=("On-Page Metric", "Value"),
+        )
+    )
+    story.append(Spacer(1, 0.15 * inch))
     story.extend(_issues_block("SEO Issues", seo.get("issues", []), normal))
+    story.extend(_recommendations_block("SEO Recommendations", seo.get("recommendations", []), normal))
+    story.extend(
+        _keyword_block(
+            "Top Keywords Used",
+            seo.get("top_keywords", []),
+            seo.get("keyword_usage", []),
+            normal,
+        )
+    )
 
     story.append(section_heading("3. Basic Accessibility Findings"))
     story.append(Spacer(1, 0.1 * inch))
+    story.append(
+        param_value_table(
+            [
+                ("Total Images", accessibility.get("total_images", 0)),
+                ("Images Missing ALT", accessibility.get("images_without_alt", 0)),
+                ("Buttons Found", accessibility.get("buttons", 0)),
+                ("Buttons Missing Text", accessibility.get("buttons_without_text", 0)),
+                ("Forms Found", accessibility.get("forms", 0)),
+                ("Inputs Missing Labels", accessibility.get("inputs_without_label", 0)),
+            ],
+            header=("Accessibility Metric", "Value"),
+        )
+    )
+    story.append(Spacer(1, 0.15 * inch))
     story.extend(
         _issues_block("Accessibility Issues", accessibility.get("issues", []), normal)
+    )
+    story.extend(
+        _recommendations_block(
+            "Accessibility Recommendations", accessibility.get("recommendations", []), normal
+        )
     )
 
     story.append(section_heading("4. Basic Performance Findings"))
     story.append(Spacer(1, 0.1 * inch))
+    story.append(
+        param_value_table(
+            [
+                ("Page Load Time", f"{performance.get('page_load_time', 0)}s"),
+                ("Page Size", f"{performance.get('page_size_kb', 0)} KB"),
+                ("Total Requests", performance.get("total_requests", 0)),
+                ("Images", performance.get("images", 0)),
+                ("Scripts", performance.get("scripts", 0)),
+                ("CSS Files", performance.get("css_files", 0)),
+            ],
+            header=("Performance Metric", "Value"),
+        )
+    )
+    story.append(Spacer(1, 0.15 * inch))
     story.extend(
         _issues_block("Performance Issues", performance.get("issues", []), normal)
+    )
+    story.extend(
+        _recommendations_block(
+            "Performance Recommendations", performance.get("recommendations", []), normal
+        )
     )
 
     story.append(section_heading("5. Basic Content Validation"))
     story.append(Spacer(1, 0.1 * inch))
+    story.append(
+        param_value_table(
+            [
+                ("Word Count", content.get("word_count", 0)),
+                ("Heading Count", content.get("heading_count", 0)),
+                ("Has Meta Description", "Yes" if content.get("has_meta_description") else "No"),
+                ("Status", content.get("status", "N/A")),
+            ],
+            header=("Content Metric", "Value"),
+        )
+    )
+    story.append(Spacer(1, 0.15 * inch))
     story.extend(_issues_block("Content Issues", content.get("issues", []), normal))
+    story.extend(
+        _recommendations_block("Content Recommendations", content.get("recommendations", []), normal)
+    )
 
     story.append(section_heading("6. Basic Image Validation"))
     story.append(Spacer(1, 0.1 * inch))
+    story.append(
+        param_value_table(
+            [
+                ("Total Images", image.get("total_images", 0)),
+                ("Missing ALT Text", image.get("missing_alt", 0)),
+                ("Missing Src Attribute", image.get("missing_src", 0)),
+            ],
+            header=("Image Metric", "Value"),
+        )
+    )
+    story.append(Spacer(1, 0.15 * inch))
     story.extend(_issues_block("Image Issues", image.get("issues", []), normal))
+    story.extend(
+        _recommendations_block("Image Recommendations", image.get("recommendations", []), normal)
+    )
 
     story.append(Spacer(1, 0.15 * inch))
     story.append(
@@ -636,26 +801,13 @@ def generate_premium_pdf_report(data, filename="Premium_Website_Report.pdf"):
 
         if status == "FAIL":
 
-            detail_items, total_found = _extract_failure_details(module_result)
+            detail_items = _extract_failure_details(module_result)
 
             if detail_items:
                 story.append(
-                    Paragraph(f"<b>{_safe(module_name)} - failing items</b>", normal)
+                    failing_items_table(_safe(module_name), [_safe(i) for i in detail_items])
                 )
-
-            for item in detail_items:
-                story.append(
-                    Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;- {_safe(item)}", normal)
-                )
-
-            if total_found > len(detail_items):
-                remaining = total_found - len(detail_items)
-                story.append(
-                    Paragraph(
-                        f"&nbsp;&nbsp;&nbsp;&nbsp;...and {remaining} more.",
-                        normal,
-                    )
-                )
+                story.append(Spacer(1, 0.14 * inch))
 
     story.append(Spacer(1, 0.25 * inch))
 
@@ -665,8 +817,57 @@ def generate_premium_pdf_report(data, filename="Premium_Website_Report.pdf"):
     story.extend(_full_security_section(security, heading, normal))
     story.append(Spacer(1, 0.25 * inch))
 
+    # ---------------- PREMIUM SECTION: SEO & KEYWORD AUDIT ----------------
+    seo_module_result = next(
+        (
+            m for m in functional.get("results", [])
+            if m.get("module") == "SEO"
+        ),
+        {},
+    )
+
+    story.append(section_heading("4. SEO &amp; Keyword Audit"))
+    story.append(Spacer(1, 0.12 * inch))
+    story.append(
+        param_value_table(
+            [
+                ("Title Tag", seo.get("title", "N/A") or "Missing"),
+                ("Meta Description Present", seo.get("meta_description", False)),
+                ("Canonical Tag Present", seo.get("canonical", False)),
+                ("Mobile Friendly", seo.get("mobile_friendly", False)),
+                ("H1 Count", seo.get("h1_count", 0)),
+                ("Structured Data Present", seo.get("structured_data", False)),
+                ("Sitemap.xml Found", seo.get("sitemap_xml", False)),
+                ("Robots.txt Found", seo.get("robots_txt", False)),
+            ],
+            header=("Metric", "Value"),
+        )
+    )
+    story.append(Spacer(1, 0.12 * inch))
+    story.append(
+        Paragraph(
+            "Covers: on-page SEO fundamentals, metadata, structured data, "
+            "crawlability and the keywords the page's own content is "
+            "actually targeting.",
+            normal,
+        )
+    )
+    story.append(Spacer(1, 0.1 * inch))
+    for issue in seo_module_result.get("issues", []):
+        story.append(Paragraph(f"&bull; {_safe(issue)}", normal))
+    story.append(Spacer(1, 0.1 * inch))
+    story.extend(
+        _keyword_block(
+            "Top Keywords Used",
+            seo_module_result.get("top_keywords", []),
+            seo_module_result.get("keyword_usage", []),
+            normal,
+        )
+    )
+    story.append(Spacer(1, 0.15 * inch))
+
     # ---------------- PREMIUM SECTION: CONTENT AUDIT ----------------
-    story.append(section_heading("4. Content Audit"))
+    story.append(section_heading("5. Content Audit"))
     story.append(Spacer(1, 0.12 * inch))
     story.append(
         param_value_table(
@@ -696,7 +897,7 @@ def generate_premium_pdf_report(data, filename="Premium_Website_Report.pdf"):
     story.append(Spacer(1, 0.25 * inch))
 
     # ---------------- PREMIUM SECTION: UX AUDIT ----------------
-    story.append(section_heading("5. User Experience (UX) Audit"))
+    story.append(section_heading("6. User Experience (UX) Audit"))
     story.append(Spacer(1, 0.12 * inch))
     story.append(
         param_value_table(
@@ -723,7 +924,7 @@ def generate_premium_pdf_report(data, filename="Premium_Website_Report.pdf"):
     story.append(Spacer(1, 0.25 * inch))
 
     # ---------------- PREMIUM SECTION: CRO AUDIT ----------------
-    story.append(section_heading("6. Conversion Rate Optimization (CRO) Audit"))
+    story.append(section_heading("7. Conversion Rate Optimization (CRO) Audit"))
     story.append(Spacer(1, 0.12 * inch))
     story.append(
         param_value_table(
@@ -756,7 +957,7 @@ def generate_premium_pdf_report(data, filename="Premium_Website_Report.pdf"):
     story.append(Spacer(1, 0.25 * inch))
 
     # ---------------- PREMIUM SECTION: TECHNICAL AUDIT ----------------
-    story.append(section_heading("7. Technical Audit"))
+    story.append(section_heading("8. Technical Audit"))
     story.append(Spacer(1, 0.12 * inch))
     crawl = technical_audit_data.get("crawl", {})
     caching = technical_audit_data.get("caching_and_compression", {})
@@ -789,13 +990,13 @@ def generate_premium_pdf_report(data, filename="Premium_Website_Report.pdf"):
 
     # ---------------- AI ROOT CAUSE + FIX RECOMMENDATION ----------------
     premium_issues = collect_premium_issues(data)
-    story.append(section_heading("8. AI Root Cause + Fix Recommendation"))
+    story.append(section_heading("9. AI Root Cause + Fix Recommendation"))
     story.append(Spacer(1, 0.12 * inch))
     story.extend(_ai_root_cause_section(premium_issues, depth="premium", normal=normal))
     story.append(Spacer(1, 0.12 * inch))
 
     # ---------------- REMEDIATION PRIORITY ----------------
-    story.append(section_heading("9. Remediation Priority"))
+    story.append(section_heading("10. Remediation Priority"))
     story.append(Spacer(1, 0.12 * inch))
     story.extend(_remediation_priority_section(premium_issues, normal))
     story.append(Spacer(1, 0.22 * inch))
@@ -895,26 +1096,13 @@ def generate_standard_pdf_report(data, filename="Standard_Website_Report.pdf"):
 
         if status == "FAIL":
 
-            detail_items, total_found = _extract_failure_details(module_result)
+            detail_items = _extract_failure_details(module_result)
 
             if detail_items:
                 story.append(
-                    Paragraph(f"<b>{_safe(module_name)} - failing items</b>", normal)
+                    failing_items_table(_safe(module_name), [_safe(i) for i in detail_items])
                 )
-
-            for item in detail_items:
-                story.append(
-                    Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;- {_safe(item)}", normal)
-                )
-
-            if total_found > len(detail_items):
-                remaining = total_found - len(detail_items)
-                story.append(
-                    Paragraph(
-                        f"&nbsp;&nbsp;&nbsp;&nbsp;...and {remaining} more.",
-                        normal,
-                    )
-                )
+                story.append(Spacer(1, 0.14 * inch))
 
     story.append(Spacer(1, 0.25 * inch))
     standard_issues = collect_standard_issues(data)
