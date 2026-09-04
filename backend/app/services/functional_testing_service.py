@@ -8244,7 +8244,6 @@ def browser_compatibility_test(playwright, url):
 
     browsers = [
         ("Chrome", playwright.chromium),
-        ("Firefox", playwright.firefox),
         ("Edge", playwright.chromium)
     ]
 
