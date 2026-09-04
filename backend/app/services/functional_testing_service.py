@@ -2725,27 +2725,44 @@ def content_validation_test(page):
             "li"
         ]
 
+        # FIX: The old version called locator.nth(i).inner_text() for
+        # EVERY matched element across 12 selectors individually - on a
+        # content-heavy page (hundreds of <p>/<span>/<a>/<li> elements)
+        # this is hundreds of separate Playwright round-trips in a row.
+        # That much traffic to the browser process is slow and memory
+        # heavy enough to crash Chromium on low-memory hosts (Railway's
+        # 1GB limit), killing the page/browser and failing every module
+        # that runs afterwards (Module 9 onward).
+        #
+        # Doing the same collection in ONE page.evaluate() call keeps
+        # the whole loop inside the browser and crosses back to Python
+        # only once, which is dramatically lighter on memory and time.
+
         elements = []
-        for selector in selectors:
 
-            try:
+        try:
 
-                locator = page.locator(selector)
+            elements = page.evaluate(
+                """
+                (selectors) => {
+                    const out = [];
+                    selectors.forEach((sel) => {
+                        document.querySelectorAll(sel).forEach((el) => {
+                            out.push((el.innerText || '').trim());
+                        });
+                    });
+                    return out;
+                }
+                """,
+                selectors
+            )
 
-                count = locator.count()
+            print(f"Total Text Elements (bulk scan) : {len(elements)}")
 
-                print(f"{selector} : {count}")
+        except Exception as e:
 
-                for i in range(count):
-
-                    text = locator.nth(i).inner_text().strip()
-
-                    elements.append(text)
-
-            except Exception as e:
-
-                print(f"{selector} Error")
-                print(e)
+            print("Bulk text element scan failed")
+            print(e)
 
         result["total_text_blocks"] = len(elements)
 
@@ -3534,43 +3551,62 @@ def content_quality_test(page):
         print("======================================")
 
         hidden_elements = []
-        elements = page.locator("*").all()
-        print(f"Total Elements : {len(elements)}")
 
-        for i, element in enumerate(elements, start=1):
+        # FIX: The old version called element.evaluate() and
+        # element.is_visible() individually for EVERY element on the
+        # page (often 500-1000+ on a content-heavy page). Each call is
+        # a separate round-trip to the browser, which is slow and
+        # memory-hungry enough to crash Chromium on low-memory hosts
+        # (e.g. Railway's 1GB limit) - killing the browser/page and
+        # failing every module that runs after this one.
+        #
+        # Doing the whole scan in a SINGLE page.evaluate() call is
+        # dramatically faster and far lighter on memory, since it
+        # only crosses the Python<->browser boundary once.
 
-            try:
+        try:
 
-                tag = element.evaluate(
-                    "el => el.tagName"
-                )
+            raw_hidden = page.evaluate(
+                """
+                () => {
+                    const results = [];
+                    const all = document.querySelectorAll('*');
+                    all.forEach((el, i) => {
+                        const style = window.getComputedStyle(el);
+                        const rect = el.getBoundingClientRect();
+                        const visible = !(
+                            style.display === 'none' ||
+                            style.visibility === 'hidden' ||
+                            style.opacity === '0' ||
+                            (rect.width === 0 && rect.height === 0)
+                        );
+                        if (!visible) {
+                            results.push({
+                                tag: el.tagName,
+                                index: i + 1
+                            });
+                        }
+                    });
+                    return { total: all.length, hidden: results };
+                }
+                """
+            )
 
-                visible = element.is_visible()
+            total_elements = raw_hidden.get("total", 0)
+            hidden_elements = raw_hidden.get("hidden", [])
+
+            print(f"Total Elements : {total_elements}")
+
+            for item in hidden_elements:
 
                 print("--------------------------------")
-                print(f"Element : {i}")
-                print(f"Tag     : {tag}")
-                print(f"Visible : {visible}")
+                print(f"Element : {item['index']}")
+                print(f"Tag     : {item['tag']}")
+                print("❌ Hidden Element")
 
-                if not visible:
+        except Exception as e:
 
-                    print("❌ Hidden Element")
-
-                    hidden_elements.append({
-
-                        "tag": tag,
-
-                        "index": i
-
-                    })
-
-                else:
-
-                    print("✅ Visible")
-
-            except Exception:
-
-                pass
+            print(f"⚠️ Hidden content scan failed : {e}")
 
         result["hidden_content"] = len(hidden_elements)
         result["hidden_content_details"] = hidden_elements
