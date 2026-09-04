@@ -13,6 +13,10 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 print("--- CONNECTING TO DATABASE ---")
 print(f"DATABASE_URL found: {bool(DATABASE_URL)}")
 
+# TEMP DEBUG — remove after fixing
+all_env = {k: v for k, v in os.environ.items() if "DATABASE" in k or "POSTGRES" in k}
+print(f"DEBUG - env vars: {all_env}")
+
 if DATABASE_URL:
     # Fix protocol prefix for SQLAlchemy 2.0+
     if DATABASE_URL.startswith("postgres://"):
