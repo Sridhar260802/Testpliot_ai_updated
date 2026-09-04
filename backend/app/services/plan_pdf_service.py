@@ -7,7 +7,7 @@ ever show the checks that actually ran for that tier - no "0 broken links /
 100 security score" sections implying a check happened when it didn't.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from xml.sax.saxutils import escape as _xml_escape
 
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -38,6 +38,23 @@ from app.services.website_ai_findings_service import (
     ai_findings,
     remediation_priority,
 )
+
+
+# ----------------------------------------------------------------------
+# FIX: Railway (and most cloud hosts) run the server clock in UTC, so
+# datetime.now() returned UTC time - which showed up on the generated
+# PDF report as being ~5.5 hours behind actual India time. IST is a
+# fixed UTC+5:30 offset (no daylight saving), so we build it explicitly
+# instead of depending on the OS timezone database being installed
+# correctly on the host.
+# ----------------------------------------------------------------------
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def now_ist():
+    """Current time in IST, for anything shown to the end user on a report."""
+    return datetime.now(IST)
 
 
 def _safe(value):
@@ -540,7 +557,7 @@ def generate_basic_pdf_report(data, filename="Basic_Website_Report.pdf"):
         build_report_header(
             subtitle_text="Professional Website Audit &amp; Analysis - Basic Plan",
             url=data.get("url", ""),
-            generated_str=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+            generated_str=now_ist().strftime("%d-%m-%Y %H:%M:%S"),
             plan_level="Basic",
         )
     )
@@ -729,7 +746,7 @@ def generate_premium_pdf_report(data, filename="Premium_Website_Report.pdf"):
         build_report_header(
             subtitle_text="Professional Website Audit &amp; Analysis - Premium Plan",
             url=data.get("url", ""),
-            generated_str=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+            generated_str=now_ist().strftime("%d-%m-%Y %H:%M:%S"),
             plan_level="Premium",
         )
     )
@@ -1030,7 +1047,7 @@ def generate_standard_pdf_report(data, filename="Standard_Website_Report.pdf"):
         build_report_header(
             subtitle_text="Professional Website Audit &amp; Analysis - Standard Plan",
             url=data.get("url", ""),
-            generated_str=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+            generated_str=now_ist().strftime("%d-%m-%Y %H:%M:%S"),
             plan_level="Standard",
         )
     )
