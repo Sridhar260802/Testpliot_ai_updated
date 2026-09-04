@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # Load .env locally, but do NOT override existing Railway variables
 load_dotenv(override=False)
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 # Debug log to verify Railway injects the right URL
 print("--- CONNECTING TO DATABASE ---")
