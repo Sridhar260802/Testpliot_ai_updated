@@ -27,6 +27,7 @@ import socket
 import json
 import fnmatch
 import datetime
+import time
 import uuid
 from urllib.parse import urlparse, urljoin
 
@@ -56,6 +57,44 @@ from app.models.security_audit import SecurityAudit
 # ============================================================
 
 REQUEST_TIMEOUT = 20
+
+# ------------------------------------------------------------------
+# Some CDNs / WAFs (Cloudflare etc.) treat the default python-requests
+# User-Agent as bot traffic and start silently 403'ing requests once a
+# scan has already fired many rapid requests at the same host - this
+# was causing false "not found" results for well-known-file checks
+# (robots.txt, security.txt, llm.txt) even when the file genuinely
+# exists, because those checks run late in the scan sequence.
+# ------------------------------------------------------------------
+DEFAULT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    )
+}
+
+
+def fetch_well_known_file(target, retries=1, backoff_seconds=1.5):
+    """
+    GET a well-known text file (robots.txt / security.txt / llm.txt) with a
+    realistic browser User-Agent and one short-backoff retry, to avoid
+    false negatives from transient bot-detection/rate-limiting on hosts
+    that have already received many requests earlier in the same scan.
+    Returns the successful `requests.Response`, or None if every attempt
+    failed to return a usable 200.
+    """
+    last_response = None
+    for attempt in range(retries + 1):
+        try:
+            r = requests.get(target, timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
+            last_response = r
+            if r.status_code == 200:
+                return r
+        except Exception:
+            last_response = None
+        if attempt < retries:
+            time.sleep(backoff_seconds)
+    return last_response if (last_response is not None and last_response.status_code == 200) else None
 
 SENSITIVE_PATHS = [
     ".env", ".git/config", "config.json", "config.php", "debug",
@@ -529,11 +568,20 @@ def domain_whois_audit(hostname):
             socket.setdefaulttimeout(old_timeout)
 
         exp = w.expiration_date
-        if isinstance(exp, list):
-            exp = exp[0]
-        result["registrar"] = w.registrar
-        result["creation_date"] = str(w.creation_date)
-        result["expiration_date"] = str(exp)
+        if isinstance(exp, (list, tuple)):
+            exp = next((value for value in exp if value), None)
+
+        registrar = w.registrar
+        if isinstance(registrar, (list, tuple)):
+            registrar = next((value for value in registrar if value), None)
+
+        creation_date = w.creation_date
+        if isinstance(creation_date, (list, tuple)):
+            creation_date = next((value for value in creation_date if value), None)
+
+        result["registrar"] = str(registrar) if registrar else None
+        result["creation_date"] = str(creation_date) if creation_date else None
+        result["expiration_date"] = str(exp) if exp else None
         if exp:
             if isinstance(exp, datetime.datetime):
                 # FIX: exp may be timezone-aware while datetime.now() is naive,
@@ -702,18 +750,73 @@ def sri_audit(response):
 # ADVANCED: SECURITY.TXT (RFC 9116)
 # ============================================================
 
+def get_site_root(url):
+    """
+    Return the true root origin (scheme + host, trailing slash) for a URL,
+    discarding any path/query/fragment. Well-known files like robots.txt,
+    security.txt and llm.txt/llms.txt must always be requested from the
+    site root - NOT from whatever deep path the scanned page happened to
+    redirect to (e.g. docs.anthropic.com redirecting to
+    platform.claude.com/docs/en/home) - otherwise urljoin would build a
+    nested, incorrect path and produce a false "not found" result.
+    """
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}/"
+
+
 def security_txt_audit(base_url):
+    base_url = get_site_root(base_url)
     for path in [".well-known/security.txt", "security.txt"]:
         target = urljoin(base_url.rstrip("/") + "/", path)
-        try:
-            r = requests.get(target, timeout=REQUEST_TIMEOUT)
-            if r.status_code == 200 and "contact" in r.text.lower():
-                return make_check("Security.txt (RFC 9116)", "PASS", "INFO",
-                                   f"security.txt found at {target}", "")
-        except Exception:
-            continue
+        r = fetch_well_known_file(target)
+        if r is not None and "contact" in r.text.lower():
+            return make_check("Security.txt (RFC 9116)", "PASS", "INFO",
+                               f"security.txt found at {target}", "")
     return make_check("Security.txt (RFC 9116)", "FAIL", "LOW", "No security.txt file found.",
                        "Publish a /.well-known/security.txt file (RFC 9116) for responsible disclosure contacts.")
+
+
+# ============================================================
+# ADVANCED: LLM.TXT / LLMS.TXT AUDIT
+# ------------------------------------------------------------
+# Checks whether the site publishes an llm.txt (or the emerging
+# llms.txt convention) at the root - a plain-text file that tells
+# AI / LLM crawlers what content on the site they may read and how
+# to interpret it. If one is found, its content is pulled into the
+# report (truncated for readability) so the user can see exactly
+# what is being disclosed to AI crawlers, instead of just a
+# present/not-present flag.
+# ============================================================
+
+LLM_TXT_CONTENT_PREVIEW_LIMIT = 1000  # characters of file content shown in the report
+
+
+def llm_txt_audit(base_url):
+    base_url = get_site_root(base_url)
+    for filename in ["llm.txt", "llms.txt"]:
+        target = urljoin(base_url.rstrip("/") + "/", filename)
+        r = fetch_well_known_file(target)
+        if r is not None and r.text.strip():
+            content = r.text.strip()
+            preview = content[:LLM_TXT_CONTENT_PREVIEW_LIMIT]
+            truncated_note = (
+                f" ... [truncated - {len(content)} characters total]"
+                if len(content) > LLM_TXT_CONTENT_PREVIEW_LIMIT else ""
+            )
+            return make_check(
+                "LLM.txt / LLMs.txt",
+                "PASS",
+                "INFO",
+                f"{filename} found at {target}. Content:\n{preview}{truncated_note}",
+                "",
+            )
+
+    return make_check(
+        "LLM.txt / LLMs.txt", "FAIL", "LOW",
+        "No llm.txt or llms.txt file found at the site root.",
+        "Publish an llm.txt (or llms.txt) file at the site root describing what "
+        "content AI/LLM crawlers may access and how to interpret it."
+    )
 
 
 # ============================================================
@@ -721,10 +824,11 @@ def security_txt_audit(base_url):
 # ============================================================
 
 def robots_txt_audit(base_url):
+    base_url = get_site_root(base_url)
     robots_url = urljoin(base_url.rstrip("/") + "/", "robots.txt")
     try:
-        r = requests.get(robots_url, timeout=REQUEST_TIMEOUT)
-        if r.status_code != 200:
+        r = fetch_well_known_file(robots_url)
+        if r is None:
             return make_check("Robots.txt", "PASS", "INFO", "No robots.txt found (nothing to disclose).", "")
 
         sensitive_lines = [
@@ -1536,6 +1640,10 @@ def security_audit(url,db,user_id):
     # ---------------- [ADVANCED] ROBOTS.TXT ----------------
     print("[10d] ROBOTS.TXT DISCLOSURE AUDIT")
     bucket_check(robots_txt_audit(response.url), passed_checks, failed_checks)
+
+    # ---------------- [ADVANCED] LLM.TXT ----------------
+    print("[10d2] LLM.TXT / LLMS.TXT AUDIT")
+    bucket_check(llm_txt_audit(response.url), passed_checks, failed_checks)
 
     # ---------------- [ADVANCED] HTTP VERSION ----------------
     print("[10e] HTTP PROTOCOL VERSION AUDIT")

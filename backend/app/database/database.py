@@ -9,13 +9,17 @@ load_dotenv(override=False)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
-# Debug log to verify Railway injects the right URL
 print("--- CONNECTING TO DATABASE ---")
 print(f"DATABASE_URL found: {bool(DATABASE_URL)}")
-
-# TEMP DEBUG — remove after fixing
-all_env = {k: v for k, v in os.environ.items() if "DATABASE" in k or "POSTGRES" in k}
-print(f"DEBUG - env vars: {all_env}")
+if not DATABASE_URL:
+    configured_env = {
+        "POSTGRES_USER": os.getenv("POSTGRES_USER", "postgres"),
+        "POSTGRES_PASSWORD": "***",
+        "POSTGRES_HOST": os.getenv("POSTGRES_HOST", "localhost"),
+        "POSTGRES_PORT": os.getenv("POSTGRES_PORT", "5432"),
+        "POSTGRES_DB": os.getenv("POSTGRES_DB", "testpilot"),
+    }
+    print(f"DEBUG - env vars: {configured_env}")
 
 if DATABASE_URL:
     # Fix protocol prefix for SQLAlchemy 2.0+
@@ -26,7 +30,7 @@ if DATABASE_URL:
         
     engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 else:
-    # Fallback for local development only
+    # Build the URL from PostgreSQL environment variables for local development.
     DB_USER = os.getenv("POSTGRES_USER", "postgres")
     DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "Testpilot@123")
     DB_HOST = os.getenv("POSTGRES_HOST", "localhost")
@@ -42,7 +46,7 @@ else:
         database=DB_NAME,
     )
 
-    engine = create_engine(database_url)
+    engine = create_engine(database_url, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

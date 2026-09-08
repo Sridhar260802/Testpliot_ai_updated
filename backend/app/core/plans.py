@@ -122,8 +122,9 @@ PLAN_FEATURES = {
             "vulnerability checks (SSL/TLS audit, TLS cipher analysis, cookie "
             "security, CORS audit, HTTP/HTTPS audit, HTTP methods audit, "
             "sensitive path audit, mixed content audit, cache-control audit, "
-            "information disclosure audit, security severity analysis and "
-            "actionable security recommendations). Conversion Rate Optimization "
+            "information disclosure audit, llm.txt/llms.txt presence check "
+            "(with its disclosed content shown when found), security severity "
+            "analysis and actionable security recommendations). Conversion Rate Optimization "
             "(CRO) Audit: landing page effectiveness, form usability, checkout "
             "process (for e-commerce), CTA placement, and analytics/conversion "
             "tracking. Delivered as a full audit report in both JSON and PDF "
@@ -178,6 +179,7 @@ PLAN_FEATURES = {
             "mixed_content_audit",
             "cache_control_audit",
             "information_disclosure_audit",
+            "llm_txt_audit",
             "security_severity_analysis",
             "security_recommendations",
             "vulnerability_checks",
