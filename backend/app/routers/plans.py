@@ -467,7 +467,14 @@ def premium_plan_report(
     update_dashboard_stats(db, "website_tests", user_id=current_user.id)
     update_dashboard_stats(db, "reports_generated", user_id=current_user.id)
     update_dashboard_stats(db, "ai_suggestions", user_id=current_user.id)
-    print("Premium report: response ready", flush=True)
+    if not os.path.isfile(pdf_path):
+        raise HTTPException(status_code=500, detail="Premium report file was not created.")
+
+    print(
+        f"Premium report: response ready (path={pdf_path}, "
+        f"bytes={os.path.getsize(pdf_path)})",
+        flush=True,
+    )
 
     return FileResponse(
         pdf_path,
