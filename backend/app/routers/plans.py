@@ -19,7 +19,7 @@ from app.services.basic_validation_service import (
     basic_content_validation,
     basic_image_validation,
 )
-from app.services.functional_testing_service import functional_testing
+from app.services.functional_testing_service import run_functional_testing
 from app.services.groq_service import generate_ai_suggestions
 from app.services.security_testing import security_audit
 from app.services.content_audit_service import content_audit
@@ -152,7 +152,7 @@ def standard_plan_report(
     seo = advanced_seo_check(data.url)
     accessibility = accessibility_check(data.url)
     performance = performance_check(data.url)
-    functional = functional_testing(data.url)
+    functional = run_functional_testing(data.url)
 
     prompt = f"""
     Website URL: {data.url}
@@ -231,7 +231,7 @@ def standard_plan_test(
     seo = advanced_seo_check(data.url)
     accessibility = accessibility_check(data.url)
     performance = performance_check(data.url)
-    functional = functional_testing(data.url)
+    functional = run_functional_testing(data.url)
 
     prompt = f"""
     Website URL: {data.url}
@@ -274,7 +274,7 @@ def _run_standard_checks(url: str):
     seo = advanced_seo_check(url)
     accessibility = accessibility_check(url)
     performance = performance_check(url)
-    functional = functional_testing(url)
+    functional = run_functional_testing(url)
 
     prompt = f"""
     Website URL: {url}

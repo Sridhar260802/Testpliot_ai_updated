@@ -3,6 +3,9 @@ from playwright.sync_api import TimeoutError
 from playwright.sync_api import sync_playwright
 from urllib.parse import urljoin
 import os
+import contextlib
+import io
+import logging
 import time
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -10283,3 +10286,20 @@ def functional_testing(url):
                 "Review Playwright execution logs."
             ]
         }
+logger = logging.getLogger(__name__)
+
+
+def run_functional_testing(url):
+    """Run the verbose audit without flooding hosted application logs."""
+    if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = functional_testing(url)
+        logger.info(
+            "Functional audit completed: score=%s passed=%s failed=%s",
+            result.get("functional_score", 0),
+            result.get("passed", 0),
+            result.get("failed", 0),
+        )
+        return result
+    return functional_testing(url)
+

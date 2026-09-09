@@ -35,7 +35,7 @@ import os
 from app.core.auth import get_current_user
 from app.services.advanced_seo_service import advanced_seo_check
 from app.services.ai_analysis_service import generate_website_ai_review
-from app.services.functional_testing_service import functional_testing
+from app.services.functional_testing_service import run_functional_testing
 from app.services.security_testing import (
     security_audit,
     generate_security_pdf
@@ -335,7 +335,7 @@ def security_test(data: WebsiteTestRequest):
 @router.post("/functional")
 def functional_test(data: WebsiteTestRequest):
 
-    return functional_testing(data.url)
+    return run_functional_testing(data.url)
 
 @router.post("/security_audit")
 def security_audit_test(

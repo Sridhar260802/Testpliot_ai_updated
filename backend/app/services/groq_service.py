@@ -35,7 +35,14 @@ def generate_ai_suggestions(prompt: str) -> str:
             contents=prompt,
             config={"temperature": 0.3, "max_output_tokens": 1000},
         )
-        text = getattr(response, "text", None)
+        text_parts = []
+        for candidate in getattr(response, "candidates", []) or []:
+            content = getattr(candidate, "content", None)
+            for part in getattr(content, "parts", []) or []:
+                text = getattr(part, "text", None)
+                if text:
+                    text_parts.append(text)
+        text = "\n".join(text_parts).strip()
         if not text:
             logger.warning("Gemini returned an empty response.")
             return FALLBACK_MESSAGE
