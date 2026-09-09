@@ -11,7 +11,7 @@ ecdsa==0.19.2
 email-validator==2.3.0
 fastapi==0.140.13
 greenlet==3.5.4
-groq==0.32.0
+google-genai==1.39.0
 h11==0.16.0
 idna==3.18
 passlib==1.7.4
