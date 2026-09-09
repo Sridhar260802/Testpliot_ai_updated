@@ -270,10 +270,19 @@ def _run_standard_checks(url: str):
     Premium plan can combine them with its security audit instead of
     running the security audit alone."""
 
-    website = test_website(url)
+    # The detailed checks below are the source of truth. Avoid having
+    # test_website repeat the same SEO/accessibility/performance requests.
+    website = test_website(url, include_detail_checks=False)
     seo = advanced_seo_check(url)
     accessibility = accessibility_check(url)
     performance = performance_check(url)
+    website["health_score"] = int(
+        (
+            seo.get("seo_score", 0)
+            + accessibility.get("accessibility_score", 0)
+            + performance.get("performance_score", 0)
+        ) / 3
+    )
     print("Premium report: functional testing started", flush=True)
     functional = run_functional_testing(url)
     print(

@@ -6,7 +6,7 @@ from app.services.accessibility_service import accessibility_check
 from app.services.performance_service import performance_check
 from playwright.sync_api import sync_playwright
 
-def test_website(url: str):
+def test_website(url: str, include_detail_checks: bool = True):
     start = time.time()
 
     try:
@@ -14,17 +14,20 @@ def test_website(url: str):
 
         end = time.time()
 
-        seo = seo_check(url)
-        accessibility = accessibility_check(url)
-        performance = performance_check(url)
+        if include_detail_checks:
+            seo = seo_check(url)
+            accessibility = accessibility_check(url)
+            performance = performance_check(url)
 
-        health_score = int(
-            (
-                seo["seo_score"] +
-                accessibility["accessibility_score"] +
-                performance["performance_score"]
-            ) / 3
-        )
+        health_score = 0
+        if include_detail_checks:
+            health_score = int(
+                (
+                    seo["seo_score"]
+                    + accessibility["accessibility_score"]
+                    + performance["performance_score"]
+                ) / 3
+            )
 
         return {
             "status_code": response.status_code,

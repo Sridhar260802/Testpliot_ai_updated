@@ -35,6 +35,14 @@ DEFAULT_ACTION_TIMEOUT = 15000
 NETWORK_IDLE_TIMEOUT = 8000
 REQUEST_TIMEOUT = 10000
 
+PLAYWRIGHT_LAUNCH_ARGS = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--disable-extensions",
+]
+
 
 def safe_network_idle(page, timeout=NETWORK_IDLE_TIMEOUT):
     """
@@ -8305,7 +8313,8 @@ def browser_compatibility_test(playwright, url):
             )
 
             browser = browser_type.launch(
-                headless=True
+                headless=True,
+                args=PLAYWRIGHT_LAUNCH_ARGS,
             )
 
             print(
@@ -9450,7 +9459,10 @@ def functional_testing(url):
 
         with sync_playwright() as p:
 
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(
+                headless=True,
+                args=PLAYWRIGHT_LAUNCH_ARGS,
+            )
             page = browser.new_page()
             # FIX: sane page-level defaults so individual actions
             # (clicks, fills, waits) don't hang for the full 30s+

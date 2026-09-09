@@ -56,7 +56,7 @@ from app.models.security_audit import SecurityAudit
 # CONFIGURATION
 # ============================================================
 
-REQUEST_TIMEOUT = float(os.getenv("AUDIT_REQUEST_TIMEOUT", "5"))
+REQUEST_TIMEOUT = float(os.getenv("AUDIT_REQUEST_TIMEOUT", "2"))
 
 # ------------------------------------------------------------------
 # Some CDNs / WAFs (Cloudflare etc.) treat the default python-requests
@@ -414,7 +414,7 @@ def weak_tls_protocol_audit(hostname, port=443):
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
 
-            with socket.create_connection((hostname, port), timeout=8) as sock:
+            with socket.create_connection((hostname, port), timeout=3) as sock:
                 with ctx.wrap_socket(sock, server_hostname=hostname) as ssock:
                     negotiated = ssock.version()
 
