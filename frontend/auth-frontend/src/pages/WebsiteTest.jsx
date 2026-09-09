@@ -38,11 +38,12 @@ const PLAN_COPY = {
 };
 
 // Real generation time per tier — this drives the progress curve, not a fake timer.
-// Basic ~3 min, Standard ~4 min, Premium ~5 min.
+// The Premium audit runs asynchronously because larger sites can take
+// 15–20 minutes without keeping the Railway request open.
 const PLAN_ESTIMATE_SECONDS = {
   basic: 180,
   standard: 240,
-  premium: 300,
+  premium: 1200,
 };
 
 export default function WebsiteTest() {
@@ -99,7 +100,48 @@ export default function WebsiteTest() {
         throw new Error(message);
       }
 
-      const blob = await response.blob();
+      let blob;
+      if (plan === "premium") {
+        const job = await response.json();
+        if (!job.job_id) {
+          throw new Error("The report job could not be started.");
+        }
+
+        let completedJob = null;
+        for (let attempt = 0; attempt < 900; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          const statusResponse = await fetch(
+            `${API_BASE_URL}/plans/${plan}/report/${job.job_id}`,
+            { headers: { Authorization: `Bearer ${getToken()}` } }
+          );
+          if (!statusResponse.ok) {
+            throw new Error("Unable to check report status.");
+          }
+          const statusData = await statusResponse.json();
+          if (statusData.status === "failed") {
+            throw new Error(statusData.detail || "Report generation failed.");
+          }
+          if (statusData.status === "completed") {
+            completedJob = statusData;
+            break;
+          }
+        }
+
+        if (!completedJob) {
+          throw new Error("Report generation timed out. Please try again.");
+        }
+
+        const downloadResponse = await fetch(
+          `${API_BASE_URL}${completedJob.download_url}`,
+          { headers: { Authorization: `Bearer ${getToken()}` } }
+        );
+        if (!downloadResponse.ok) {
+          throw new Error("The report was generated but could not be downloaded.");
+        }
+        blob = await downloadResponse.blob();
+      } else {
+        blob = await response.blob();
+      }
       setReportBlobUrl(URL.createObjectURL(blob));
       setStatus("done");
     } catch (err) {

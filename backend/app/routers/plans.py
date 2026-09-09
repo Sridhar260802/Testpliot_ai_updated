@@ -1,12 +1,13 @@
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.plans import require_plan, PLAN_FEATURES
 from app.database.dependency import get_db
+from app.database.database import SessionLocal
 from app.models.user import User
 from app.schemas.website_test import WebsiteTestRequest
 
@@ -39,6 +40,8 @@ router = APIRouter(
     prefix="/plans",
     tags=["Plans"]
 )
+
+_premium_jobs = {}
 
 
 def _new_report_path(plan: str, user_id: int) -> str:
@@ -401,11 +404,10 @@ def premium_plan_security_audit(
     }
 
 
-@router.post("/premium/report")
-def premium_plan_report(
+def _generate_premium_report(
     data: WebsiteTestRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_plan("premium"))
+    db: Session,
+    user_id: int,
 ):
     """
     Same combined checks as POST /plans/premium/security-audit (Standard
@@ -421,7 +423,7 @@ def premium_plan_report(
     security = security_audit(
         data.url,
         db,
-        current_user.id,
+        user_id,
         persist=False,
         generate_pdf=False,
     )
@@ -449,7 +451,7 @@ def premium_plan_report(
 
     pdf_path = generate_premium_pdf_report(
         report_data,
-        filename=_new_report_path("premium", current_user.id)
+        filename=_new_report_path("premium", user_id)
     )
     print("Premium report: PDF generated", flush=True)
 
@@ -464,7 +466,7 @@ def premium_plan_report(
         broken=extra["technical"].get("crawl", {}),
         ai=standard["ai_suggestions"],
         severity=calculate_website_severity(website.get("health_score", 0)),
-        user_id=current_user.id,
+        user_id=user_id,
         plan="premium",
         report_path=pdf_path,
     )
@@ -473,9 +475,9 @@ def premium_plan_report(
         url=data.url,
         functional=functional
     )
-    update_dashboard_stats(db, "website_tests", user_id=current_user.id)
-    update_dashboard_stats(db, "reports_generated", user_id=current_user.id)
-    update_dashboard_stats(db, "ai_suggestions", user_id=current_user.id)
+    update_dashboard_stats(db, "website_tests", user_id=user_id)
+    update_dashboard_stats(db, "reports_generated", user_id=user_id)
+    update_dashboard_stats(db, "ai_suggestions", user_id=user_id)
     if not os.path.isfile(pdf_path):
         raise HTTPException(status_code=500, detail="Premium report file was not created.")
 
@@ -490,6 +492,70 @@ def premium_plan_report(
         media_type="application/pdf",
         filename="TestPilot_Premium_Report.pdf"
     )
+
+
+def _run_premium_report_job(job_id: str, data: WebsiteTestRequest, user_id: int):
+    db = SessionLocal()
+    try:
+        response = _generate_premium_report(data, db, user_id)
+        _premium_jobs[job_id] = {
+            "status": "completed",
+            "path": response.path,
+        }
+    except Exception as exc:
+        db.rollback()
+        _premium_jobs[job_id] = {
+            "status": "failed",
+            "error": str(exc),
+        }
+    finally:
+        db.close()
+
+
+@router.post("/premium/report", status_code=202)
+def premium_plan_report(
+    data: WebsiteTestRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_plan("premium")),
+):
+    job_id = uuid.uuid4().hex
+    _premium_jobs[job_id] = {"status": "queued"}
+    background_tasks.add_task(
+        _run_premium_report_job,
+        job_id,
+        data,
+        current_user.id,
+    )
+    return {"job_id": job_id, "status": "queued"}
+
+
+@router.get("/premium/report/{job_id}")
+def premium_report_status(
+    job_id: str,
+    current_user: User = Depends(require_plan("premium")),
+):
+    job = _premium_jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Premium report job not found.")
+    if job["status"] == "failed":
+        raise HTTPException(status_code=500, detail=job["error"])
+    if job["status"] != "completed":
+        return {"job_id": job_id, "status": job["status"]}
+    return {"job_id": job_id, "status": "completed", "download_url": f"/plans/premium/report/{job_id}/download"}
+
+
+@router.get("/premium/report/{job_id}/download")
+def download_premium_report(
+    job_id: str,
+    current_user: User = Depends(require_plan("premium")),
+):
+    job = _premium_jobs.get(job_id)
+    if job is None or job.get("status") != "completed":
+        raise HTTPException(status_code=404, detail="Premium report is not ready.")
+    path = job["path"]
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Premium report file is no longer available.")
+    return FileResponse(path, media_type="application/pdf", filename="TestPilot_Premium_Report.pdf")
 
 
 @router.get("/premium/security-audit/pdf")
