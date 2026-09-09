@@ -8,7 +8,12 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+# Gemini API currently requires the 3.6 Flash model; older 2.0 models are
+# no longer available for generate_content requests.
+configured_model = os.getenv("GEMINI_MODEL", "").strip()
+MODEL = "gemini-3.6-flash" if (
+    not configured_model or configured_model.startswith("gemini-2.")
+) else configured_model
 FALLBACK_MESSAGE = (
     "AI-written recommendations aren't available for this report right now. "
     "All test results above are unaffected — see the scores and module details "

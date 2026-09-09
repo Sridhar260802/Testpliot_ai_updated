@@ -63,6 +63,25 @@ def safe_goto(page, url, timeout=DEFAULT_NAV_TIMEOUT):
             return None
 
 
+def ensure_active_page(browser, page, url):
+    """Reuse the page when healthy; recreate it after a browser/page crash."""
+    if page is not None and not page.is_closed():
+        try:
+            if page.context.browser.is_connected():
+                return page
+        except Exception:
+            pass
+
+    if browser is None or not browser.is_connected():
+        raise RuntimeError("Playwright browser is no longer connected.")
+
+    print("⚠️ Playwright page was closed; creating a replacement page.")
+    replacement = browser.new_page()
+    replacement.set_default_timeout(DEFAULT_NAV_TIMEOUT)
+    replacement.set_default_navigation_timeout(DEFAULT_NAV_TIMEOUT)
+    safe_goto(replacement, url)
+    return replacement
+
 
 
 # =====================================
@@ -9475,7 +9494,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(2000)
 
                 results.append(
@@ -9510,7 +9529,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(1500)
 
                 results.append(
@@ -9545,7 +9564,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(1500)
 
                 results.append(
@@ -9580,7 +9599,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(1500)
 
                 results.append(
@@ -9615,7 +9634,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(1500)
 
                 results.append(
@@ -9650,7 +9669,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(1500)
 
                 results.append(
@@ -9685,7 +9704,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(1500)
 
                 results.append(
@@ -9720,7 +9739,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(3000)
 
                 results.append(
@@ -9755,7 +9774,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(3000)
 
                 results.append(
@@ -9790,7 +9809,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(3000)
 
                 results.append(
@@ -9829,7 +9848,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(3000)
 
                 results.append(
@@ -9864,7 +9883,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(5000)
 
                 results.append(
@@ -9900,7 +9919,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(4000)
 
                 results.append(
@@ -9935,7 +9954,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(4000)
 
                 results.append(
@@ -9970,7 +9989,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(3000)
 
                 results.append(
@@ -10005,7 +10024,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(3000)
 
                 results.append(
@@ -10040,7 +10059,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(3000)
 
                 results.append(
@@ -10075,7 +10094,7 @@ def functional_testing(url):
 
             try:
 
-                safe_goto(page, url)
+                page = ensure_active_page(browser, page, url)
                 page.wait_for_timeout(3000)
 
                 results.append(
