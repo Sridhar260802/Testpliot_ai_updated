@@ -274,7 +274,15 @@ def _run_standard_checks(url: str):
     seo = advanced_seo_check(url)
     accessibility = accessibility_check(url)
     performance = performance_check(url)
+    print("Premium report: functional testing started", flush=True)
     functional = run_functional_testing(url)
+    print(
+        "Premium report: functional testing completed "
+        f"(score={functional.get('functional_score', 0)}, "
+        f"executed={functional.get('executed_modules', 0)}/"
+        f"{functional.get('total_modules', 0)})",
+        flush=True,
+    )
 
     prompt = f"""
     Website URL: {url}
@@ -399,7 +407,15 @@ def premium_plan_report(
     print("Premium report: standard checks started", flush=True)
     standard = _run_standard_checks(data.url)
     print("Premium report: standard checks completed", flush=True)
-    security = security_audit(data.url, db, current_user.id)
+    # The combined report generates and persists its own final PDF below.
+    # Avoid doing the standalone security report work twice on Railway.
+    security = security_audit(
+        data.url,
+        db,
+        current_user.id,
+        persist=False,
+        generate_pdf=False,
+    )
     print("Premium report: security audit completed", flush=True)
     extra = _run_premium_only_checks(data.url)
     print("Premium report: content/UX/CRO/technical checks completed", flush=True)

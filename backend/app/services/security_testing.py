@@ -70,7 +70,9 @@ DEFAULT_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    )
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
 }
 
 
@@ -213,7 +215,16 @@ def calculate_security_score(passed, failed):
 
 def safe_request(session, method, url, **kwargs):
     try:
-        return session.request(method, url, timeout=REQUEST_TIMEOUT, allow_redirects=True, **kwargs)
+        headers = dict(DEFAULT_HEADERS)
+        headers.update(kwargs.pop("headers", {}) or {})
+        return session.request(
+            method,
+            url,
+            timeout=REQUEST_TIMEOUT,
+            allow_redirects=True,
+            headers=headers,
+            **kwargs,
+        )
     except Exception:
         return None
 
@@ -1497,7 +1508,7 @@ def malware_detection_audit(response, base_url):
 # MAIN SECURITY AUDIT
 # ============================================================
 
-def security_audit(url,db,user_id):
+def security_audit(url, db, user_id, persist=True, generate_pdf=True):
     url = normalize_url(url)
     print("\n========== ADVANCED SECURITY AUDIT (V3) ==========\n")
 
@@ -1828,37 +1839,37 @@ def security_audit(url,db,user_id):
     # ---------------- SAVE JSON ----------------
     # Unique per-audit filename - previously this was a fixed name that
     # every audit (from every user) overwrote, so old reports vanished.
-    report_id = f"{user_id}_{uuid.uuid4().hex}"
-    os.makedirs("security_reports", exist_ok=True)
-    json_path = os.path.join("security_reports", f"security_audit_report_{report_id}.json")
-    with open(json_path, "w", encoding="utf-8") as file:
-        json.dump(result, file, indent=4, ensure_ascii=False, default=str)
-    print(f"JSON report saved : {json_path}")
+    if persist or generate_pdf:
+        report_id = f"{user_id}_{uuid.uuid4().hex}"
+        os.makedirs("security_reports", exist_ok=True)
+        json_path = os.path.join("security_reports", f"security_audit_report_{report_id}.json")
+        with open(json_path, "w", encoding="utf-8") as file:
+            json.dump(result, file, indent=4, ensure_ascii=False, default=str)
+        print(f"JSON report saved : {json_path}")
 
-    # ---------------- GENERATE PDF ----------------
-    pdf_path = generate_security_pdf(result, client_name="Client", report_id=report_id)
-    result["pdf_report"] = pdf_path
-    # ---------------- SAVE SECURITY AUDIT TO DATABASE ----------------
-    try:
-        audit = SecurityAudit(
-        user_id=user_id,
-        url=result.get("url", url),
-        status=result.get("status", "FAIL"),
-        security_score=result.get("security_score", 0),
-        issue=str(result.get("issues", "")),
-        possible_reason=result.get("possible_reason"),
-        recommendation=str(result.get("recommendations", "")),
-        developer_action=result.get("developer_action")
-    )
+        if generate_pdf:
+            pdf_path = generate_security_pdf(result, client_name="Client", report_id=report_id)
+            result["pdf_report"] = pdf_path
 
-        db.add(audit)
-        db.commit()
-        db.refresh(audit)
-        print("✅ Security Audit data stored in database")
-
-    except Exception as e:
-        db.rollback()
-        print(f"❌ Security Audit DB Error: {e}")
+        if persist:
+            try:
+                audit = SecurityAudit(
+                    user_id=user_id,
+                    url=result.get("url", url),
+                    status=result.get("status", "FAIL"),
+                    security_score=result.get("security_score", 0),
+                    issue=str(result.get("issues", "")),
+                    possible_reason=result.get("possible_reason"),
+                    recommendation=str(result.get("recommendations", "")),
+                    developer_action=result.get("developer_action"),
+                )
+                db.add(audit)
+                db.commit()
+                db.refresh(audit)
+                print("✅ Security Audit data stored in database")
+            except Exception as e:
+                db.rollback()
+                print(f"❌ Security Audit DB Error: {e}")
 
     return result
 
