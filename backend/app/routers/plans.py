@@ -396,9 +396,13 @@ def premium_plan_report(
     Technical), returned as a single combined PDF report instead of JSON.
     """
 
+    print("Premium report: standard checks started", flush=True)
     standard = _run_standard_checks(data.url)
+    print("Premium report: standard checks completed", flush=True)
     security = security_audit(data.url, db, current_user.id)
+    print("Premium report: security audit completed", flush=True)
     extra = _run_premium_only_checks(data.url)
+    print("Premium report: content/UX/CRO/technical checks completed", flush=True)
 
     website = standard["website"]
     functional = standard["functional"]
@@ -422,6 +426,7 @@ def premium_plan_report(
         report_data,
         filename=_new_report_path("premium", current_user.id)
     )
+    print("Premium report: PDF generated", flush=True)
 
     save_website_test(
         db=db,
@@ -446,6 +451,7 @@ def premium_plan_report(
     update_dashboard_stats(db, "website_tests", user_id=current_user.id)
     update_dashboard_stats(db, "reports_generated", user_id=current_user.id)
     update_dashboard_stats(db, "ai_suggestions", user_id=current_user.id)
+    print("Premium report: response ready", flush=True)
 
     return FileResponse(
         pdf_path,

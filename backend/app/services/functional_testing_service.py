@@ -10291,7 +10291,7 @@ logger = logging.getLogger(__name__)
 
 def run_functional_testing(url):
     """Run the verbose audit without flooding hosted application logs."""
-    if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
+    if os.getenv("FUNCTIONAL_AUDIT_VERBOSE") != "1":
         with contextlib.redirect_stdout(io.StringIO()):
             result = functional_testing(url)
         logger.info(
@@ -10302,4 +10302,3 @@ def run_functional_testing(url):
         )
         return result
     return functional_testing(url)
-
