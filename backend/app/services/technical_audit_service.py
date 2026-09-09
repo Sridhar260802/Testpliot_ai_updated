@@ -1,6 +1,7 @@
 from urllib.parse import urljoin, urlparse
 
 import requests
+import os
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
@@ -128,7 +129,11 @@ def _core_web_vitals(url: str):
                 """
             )
 
-            page.goto(url, wait_until="load", timeout=60000)
+            page.goto(
+                url,
+                wait_until="load",
+                timeout=int(os.getenv("AUDIT_BROWSER_TIMEOUT", "15000")),
+            )
             page.wait_for_timeout(4000)
 
             cwv = page.evaluate("window.__cwv")

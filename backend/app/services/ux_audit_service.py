@@ -2,6 +2,7 @@ import re
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
+import os
 
 CTA_KEYWORDS = [
     "buy now", "sign up", "get started", "subscribe", "book now",
@@ -34,8 +35,12 @@ def ux_audit(url: str):
 
             # ---------------- Static structure (desktop render) ----------------
             page = browser.new_page(viewport={"width": 1440, "height": 900})
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(3000)
+            page.goto(
+                url,
+                wait_until="domcontentloaded",
+                timeout=int(os.getenv("AUDIT_BROWSER_TIMEOUT", "15000")),
+            )
+            page.wait_for_timeout(int(os.getenv("AUDIT_RENDER_WAIT_MS", "500")))
             html = page.content()
             page.close()
 
@@ -72,8 +77,12 @@ def ux_audit(url: str):
                     viewport={"width": vp["width"], "height": vp["height"]}
                 )
                 try:
-                    vp_page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                    vp_page.wait_for_timeout(1500)
+                    vp_page.goto(
+                        url,
+                        wait_until="domcontentloaded",
+                        timeout=int(os.getenv("AUDIT_BROWSER_TIMEOUT", "15000")),
+                    )
+                    vp_page.wait_for_timeout(int(os.getenv("AUDIT_RENDER_WAIT_MS", "500")))
 
                     scroll_width = vp_page.evaluate("document.documentElement.scrollWidth")
                     client_width = vp_page.evaluate("document.documentElement.clientWidth")

@@ -56,7 +56,7 @@ from app.models.security_audit import SecurityAudit
 # CONFIGURATION
 # ============================================================
 
-REQUEST_TIMEOUT = 20
+REQUEST_TIMEOUT = float(os.getenv("AUDIT_REQUEST_TIMEOUT", "5"))
 
 # ------------------------------------------------------------------
 # Some CDNs / WAFs (Cloudflare etc.) treat the default python-requests
@@ -74,7 +74,7 @@ DEFAULT_HEADERS = {
 }
 
 
-def fetch_well_known_file(target, retries=1, backoff_seconds=1.5):
+def fetch_well_known_file(target, retries=0, backoff_seconds=1.5):
     """
     GET a well-known text file (robots.txt / security.txt / llm.txt) with a
     realistic browser User-Agent and one short-backoff retry, to avoid

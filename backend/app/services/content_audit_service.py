@@ -3,6 +3,7 @@ from collections import Counter
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
+import os
 
 
 def _flesch_reading_ease(text: str) -> float:
@@ -51,8 +52,12 @@ def content_audit(url: str):
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(3000)
+            page.goto(
+                url,
+                wait_until="domcontentloaded",
+                timeout=int(os.getenv("AUDIT_BROWSER_TIMEOUT", "15000")),
+            )
+            page.wait_for_timeout(int(os.getenv("AUDIT_RENDER_WAIT_MS", "500")))
             html = page.content()
             browser.close()
 
