@@ -7,7 +7,7 @@ ever show the checks that actually ran for that tier - no "0 broken links /
 100 security score" sections implying a check happened when it didn't.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from xml.sax.saxutils import escape as _xml_escape
 
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -38,6 +38,11 @@ from app.services.website_ai_findings_service import (
     ai_findings,
     remediation_priority,
 )
+
+
+def _generated_timestamp():
+    india_timezone = timezone(timedelta(hours=5, minutes=30))
+    return datetime.now(india_timezone).strftime("%d-%m-%Y %H:%M:%S")
 
 
 def _safe(value):
@@ -540,7 +545,7 @@ def generate_basic_pdf_report(data, filename="Basic_Website_Report.pdf"):
         build_report_header(
             subtitle_text="Professional Website Audit &amp; Analysis - Basic Plan",
             url=data.get("url", ""),
-            generated_str=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+            generated_str=_generated_timestamp(),
             plan_level="Basic",
         )
     )
@@ -729,7 +734,7 @@ def generate_premium_pdf_report(data, filename="Premium_Website_Report.pdf"):
         build_report_header(
             subtitle_text="Professional Website Audit &amp; Analysis - Premium Plan",
             url=data.get("url", ""),
-            generated_str=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+            generated_str=_generated_timestamp(),
             plan_level="Premium",
         )
     )
@@ -1030,7 +1035,7 @@ def generate_standard_pdf_report(data, filename="Standard_Website_Report.pdf"):
         build_report_header(
             subtitle_text="Professional Website Audit &amp; Analysis - Standard Plan",
             url=data.get("url", ""),
-            generated_str=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+            generated_str=_generated_timestamp(),
             plan_level="Standard",
         )
     )
